@@ -89,6 +89,10 @@ Click "Add Integration"
 Select "n8n Webhook"
 Enter your webhook URL and API key
 Click "Save"
+
+Securing Webhook Endpoints
+Set the `N8N_API_KEY` value in your `.env` file (or export it before running Docker) to enable API key authentication for automation and webhook endpoints.
+Include the key in external requests through the `x-api-key` header or a `Bearer` token (e.g. `Authorization: Bearer <your-key>`).
 Creating Automation Rules
 Go to Settings > Automation
 Click "Add Rule"
@@ -99,6 +103,9 @@ Tasks
 GET /api/tasks - Get all tasks
 GET /api/tasks/:id - Get a specific task
 POST /api/tasks - Create a new task
+POST /api/tasks/create - Create a task through an API-key protected automation webhook
+POST /api/tasks/update - Update a task through an API-key protected automation webhook
+POST /api/tasks/delete - Delete a task through an API-key protected automation webhook
 PUT /api/tasks/:id - Update a task
 DELETE /api/tasks/:id - Delete a task
 Boards
