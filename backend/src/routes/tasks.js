@@ -1,10 +1,43 @@
 const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
-const { v4: uuidv4 } = require('uuid');
 const { db } = require('../utils/database');
 const { recordTaskHistory } = require('../utils/history');
 const { triggerAutomation } = require('../services/automation');
+const apiKeyAuth = require('../middleware/apiKeyAuth');
+
+const createTaskValidations = [
+  body('title').notEmpty().withMessage('Title is required'),
+  body('column_id').custom((value, { req }) => {
+    const incoming = value ?? req.body.columnId;
+
+    if (incoming === undefined || incoming === null || incoming === '') {
+      throw new Error('Column ID must be an integer');
+    }
+
+    const parsed = Number(incoming);
+
+    if (!Number.isInteger(parsed)) {
+      throw new Error('Column ID must be an integer');
+    }
+
+    req.body.column_id = parsed;
+    return true;
+  }),
+];
+
+const updateTaskValidations = [
+  body('title').optional().notEmpty().withMessage('Title cannot be empty'),
+];
+
+const webhookUpdateValidations = [
+  body('id').isInt().withMessage('Task ID is required'),
+  ...updateTaskValidations,
+];
+
+const webhookDeleteValidations = [
+  body('id').isInt().withMessage('Task ID is required'),
+];
 
 // Get all tasks
 router.get('/', (req, res) => {
@@ -166,250 +199,88 @@ router.get('/:id', (req, res) => {
 });
 
 // Create a new task
-router.post('/', [
-  body('title').notEmpty().withMessage('Title is required'),
-  body('column_id').isInt().withMessage('Column ID must be an integer'),
-], (req, res) => {
+router.post('/', createTaskValidations, async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
   }
-  
-  const {
-    title,
-    description,
-    column_id,
-    swimlane_id,
-    priority = 'medium',
-    due_date,
-    recurring_rule,
-    pinned = 0,
-    created_by,
-    assigned_to,
-    tags = []
-  } = req.body;
-  
-  // Get the next position for the task in the column
-  db.get(
-    'SELECT MAX(position) as maxPosition FROM tasks WHERE column_id = ? AND (swimlane_id = ? OR (swimlane_id IS NULL AND ? IS NULL))',
-    [column_id, swimlane_id, swimlane_id],
-    (err, row) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      
-      const position = (row.maxPosition || 0) + 1;
-      
-      db.run(
-        `INSERT INTO tasks (title, description, column_id, swimlane_id, position, priority, due_date, recurring_rule, pinned, created_by, assigned_to)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [title, description, column_id, swimlane_id, position, priority, due_date, recurring_rule, pinned, created_by, assigned_to],
-        function(err) {
-          if (err) {
-            return res.status(500).json({ error: err.message });
-          }
-          
-          const taskId = this.lastID;
-          
-          // Record task history
-          recordTaskHistory(taskId, 'created', null, null, created_by);
-          
-          // Add tags to the task
-          if (tags.length > 0) {
-            const tagPromises = tags.map(tagId => {
-              return new Promise((resolve, reject) => {
-                db.run(
-                  'INSERT INTO task_tags (task_id, tag_id) VALUES (?, ?)',
-                  [taskId, tagId],
-                  (err) => {
-                    if (err) reject(err);
-                    else resolve();
-                  }
-                );
-              });
-            });
-            
-            Promise.all(tagPromises)
-              .then(() => {
-                // Trigger automation for task creation
-                triggerAutomation('task_created', { taskId, columnId, priority, assignedTo: assigned_to });
-                res.status(201).json({ id: taskId, message: 'Task created successfully' });
-              })
-              .catch(err => {
-                res.status(500).json({ error: err.message });
-              });
-          } else {
-            // Trigger automation for task creation
-            triggerAutomation('task_created', { taskId, columnId, priority, assignedTo: assigned_to });
-            res.status(201).json({ id: taskId, message: 'Task created successfully' });
-          }
-        }
-      );
-    }
-  );
+
+  try {
+    const result = await createTaskRecord(req.body);
+    res.status(201).json({ ...result, message: 'Task created successfully' });
+  } catch (error) {
+    handleTaskError(res, error);
+  }
+});
+
+// API-key protected endpoint for external automation (e.g. n8n) to create tasks
+router.post('/create', apiKeyAuth, createTaskValidations, async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const result = await createTaskRecord(req.body);
+    res.status(201).json({ ...result, message: 'Task created successfully', source: 'automation' });
+  } catch (error) {
+    handleTaskError(res, error);
+  }
 });
 
 // Update a task
-router.put('/:id', [
-  body('title').optional().notEmpty().withMessage('Title cannot be empty'),
-], (req, res) => {
+router.put('/:id', updateTaskValidations, async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
   }
-  
-  const { id } = req.params;
-  const {
-    title,
-    description,
-    column_id,
-    swimlane_id,
-    position,
-    priority,
-    due_date,
-    recurring_rule,
-    pinned,
-    assigned_to,
-    updated_by
-  } = req.body;
-  
-  // Get current task data for history tracking
-  db.get('SELECT * FROM tasks WHERE id = ?', [id], (err, currentTask) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    
-    if (!currentTask) {
-      return res.status(404).json({ error: 'Task not found' });
-    }
-    
-    // Build update query dynamically
-    const updates = [];
-    const values = [];
-    
-    if (title !== undefined) {
-      updates.push('title = ?');
-      values.push(title);
-      if (title !== currentTask.title) {
-        recordTaskHistory(id, 'title_changed', currentTask.title, title, updated_by);
-      }
-    }
-    
-    if (description !== undefined) {
-      updates.push('description = ?');
-      values.push(description);
-      if (description !== currentTask.description) {
-        recordTaskHistory(id, 'description_changed', currentTask.description, description, updated_by);
-      }
-    }
-    
-    if (column_id !== undefined) {
-      updates.push('column_id = ?');
-      values.push(column_id);
-      if (column_id !== currentTask.column_id) {
-        recordTaskHistory(id, 'column_changed', currentTask.column_id, column_id, updated_by);
-        // Trigger automation for column change
-        triggerAutomation('task_moved', { taskId: id, oldColumnId: currentTask.column_id, newColumnId: column_id });
-      }
-    }
-    
-    if (swimlane_id !== undefined) {
-      updates.push('swimlane_id = ?');
-      values.push(swimlane_id);
-      if (swimlane_id !== currentTask.swimlane_id) {
-        recordTaskHistory(id, 'swimlane_changed', currentTask.swimlane_id, swimlane_id, updated_by);
-      }
-    }
-    
-    if (position !== undefined) {
-      updates.push('position = ?');
-      values.push(position);
-    }
-    
-    if (priority !== undefined) {
-      updates.push('priority = ?');
-      values.push(priority);
-      if (priority !== currentTask.priority) {
-        recordTaskHistory(id, 'priority_changed', currentTask.priority, priority, updated_by);
-      }
-    }
-    
-    if (due_date !== undefined) {
-      updates.push('due_date = ?');
-      values.push(due_date);
-      if (due_date !== currentTask.due_date) {
-        recordTaskHistory(id, 'due_date_changed', currentTask.due_date, due_date, updated_by);
-      }
-    }
-    
-    if (recurring_rule !== undefined) {
-      updates.push('recurring_rule = ?');
-      values.push(recurring_rule);
-    }
-    
-    if (pinned !== undefined) {
-      updates.push('pinned = ?');
-      values.push(pinned);
-    }
-    
-    if (assigned_to !== undefined) {
-      updates.push('assigned_to = ?');
-      values.push(assigned_to);
-      if (assigned_to !== currentTask.assigned_to) {
-        recordTaskHistory(id, 'assignment_changed', currentTask.assigned_to, assigned_to, updated_by);
-      }
-    }
-    
-    if (updates.length === 0) {
-      return res.status(400).json({ error: 'No valid fields to update' });
-    }
-    
-    updates.push('updated_at = CURRENT_TIMESTAMP');
-    values.push(id);
-    
-    db.run(
-      `UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`,
-      values,
-      function(err) {
-        if (err) {
-          return res.status(500).json({ error: err.message });
-        }
-        
-        res.json({ message: 'Task updated successfully' });
-      }
-    );
-  });
+
+  try {
+    const result = await updateTaskRecord(req.params.id, req.body);
+    res.json(result);
+  } catch (error) {
+    handleTaskError(res, error);
+  }
+});
+
+// API-key protected endpoint for external automation to update tasks
+router.post('/update', apiKeyAuth, webhookUpdateValidations, async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const result = await updateTaskRecord(req.body.id, req.body);
+    res.json({ ...result, source: 'automation' });
+  } catch (error) {
+    handleTaskError(res, error);
+  }
 });
 
 // Delete a task
-router.delete('/:id', (req, res) => {
-  const { id } = req.params;
-  const { deleted_by } = req.body;
-  
-  // Get current task data for history tracking
-  db.get('SELECT * FROM tasks WHERE id = ?', [id], (err, task) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    
-    if (!task) {
-      return res.status(404).json({ error: 'Task not found' });
-    }
-    
-    db.run('DELETE FROM tasks WHERE id = ?', [id], function(err) {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      
-      // Record task history
-      recordTaskHistory(id, 'deleted', null, null, deleted_by);
-      
-      // Trigger automation for task deletion
-      triggerAutomation('task_deleted', { taskId: id, columnId: task.column_id });
-      
-      res.json({ message: 'Task deleted successfully' });
-    });
-  });
+router.delete('/:id', async (req, res) => {
+  try {
+    const result = await deleteTaskRecord(req.params.id, req.body);
+    res.json(result);
+  } catch (error) {
+    handleTaskError(res, error);
+  }
+});
+
+// API-key protected endpoint for external automation to delete tasks
+router.post('/delete', apiKeyAuth, webhookDeleteValidations, async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const result = await deleteTaskRecord(req.body.id, req.body);
+    res.json({ ...result, source: 'automation' });
+  } catch (error) {
+    handleTaskError(res, error);
+  }
 });
 
 // Add a subtask to a task
@@ -508,7 +379,7 @@ router.put('/:taskId/subtasks/:subtaskId', [
 // Delete a subtask
 router.delete('/:taskId/subtasks/:subtaskId', (req, res) => {
   const { taskId, subtaskId } = req.params;
-  
+
   db.run(
     'DELETE FROM subtasks WHERE id = ? AND task_id = ?',
     [subtaskId, taskId],
@@ -582,3 +453,287 @@ router.delete('/:id/tags', (req, res) => {
 });
 
 module.exports = router;
+
+function normalizeOptionalInt(value, { treatUndefinedAsNull = false } = {}) {
+  if (value === undefined) {
+    return treatUndefinedAsNull ? null : undefined;
+  }
+
+  if (value === null || value === '') {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+async function createTaskRecord(data) {
+  const title = data.title;
+  const columnId = Number(data.column_id ?? data.columnId);
+  const swimlaneId = normalizeOptionalInt(data.swimlane_id ?? data.swimlaneId, { treatUndefinedAsNull: true });
+  const description = data.description ?? '';
+  const priority = data.priority ?? 'medium';
+  const dueDate = data.due_date ?? data.dueDate ?? null;
+  const recurringRule = data.recurring_rule ?? data.recurringRule ?? null;
+  const pinned = data.pinned ?? 0;
+  const createdBy = normalizeOptionalInt(data.created_by ?? data.createdBy, { treatUndefinedAsNull: true });
+  const assignedTo = normalizeOptionalInt(data.assigned_to ?? data.assignedTo, { treatUndefinedAsNull: true });
+  const tags = Array.isArray(data.tags)
+    ? data.tags
+    : Array.isArray(data.tagIds)
+      ? data.tagIds
+      : [];
+  const tagIds = tags
+    .map(tag => {
+      if (tag && typeof tag === 'object') {
+        return tag.id ?? tag.tag_id ?? tag.value;
+      }
+      return tag;
+    })
+    .filter(tag => tag !== undefined && tag !== null)
+    .map(tag => normalizeOptionalInt(tag, { treatUndefinedAsNull: true }))
+    .filter(tag => tag !== null);
+
+  return new Promise((resolve, reject) => {
+    db.get(
+      'SELECT MAX(position) as maxPosition FROM tasks WHERE column_id = ? AND (swimlane_id = ? OR (swimlane_id IS NULL AND ? IS NULL))',
+      [columnId, swimlaneId, swimlaneId],
+      (err, row) => {
+        if (err) {
+          return reject({ status: 500, message: err.message });
+        }
+
+        const position = (row?.maxPosition || 0) + 1;
+
+        db.run(
+          `INSERT INTO tasks (title, description, column_id, swimlane_id, position, priority, due_date, recurring_rule, pinned, created_by, assigned_to)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            title,
+            description,
+            columnId,
+            swimlaneId,
+            position,
+            priority,
+            dueDate,
+            recurringRule,
+            pinned,
+            createdBy,
+            assignedTo,
+          ],
+          function(insertErr) {
+            if (insertErr) {
+              return reject({ status: 500, message: insertErr.message });
+            }
+
+            const taskId = this.lastID;
+
+            recordTaskHistory(taskId, 'created', null, null, createdBy);
+
+            const finalize = () => {
+              triggerAutomation('task_created', {
+                taskId,
+                columnId,
+                priority,
+                assignedTo,
+              });
+
+              resolve({ id: taskId });
+            };
+
+            if (tagIds.length === 0) {
+              finalize();
+              return;
+            }
+
+            const tagPromises = tagIds.map(tagId => new Promise((tagResolve, tagReject) => {
+              db.run(
+                'INSERT INTO task_tags (task_id, tag_id) VALUES (?, ?)',
+                [taskId, tagId],
+                (tagErr) => {
+                  if (tagErr) {
+                    tagReject(tagErr);
+                  } else {
+                    tagResolve();
+                  }
+                }
+              );
+            }));
+
+            Promise.all(tagPromises)
+              .then(finalize)
+              .catch(tagErr => reject({ status: 500, message: tagErr.message }));
+          }
+        );
+      }
+    );
+  });
+}
+
+async function updateTaskRecord(id, data) {
+  const title = data.title;
+  const description = data.description;
+  const columnId = normalizeOptionalInt(data.column_id ?? data.columnId);
+  const swimlaneId = normalizeOptionalInt(data.swimlane_id ?? data.swimlaneId);
+  const position = normalizeOptionalInt(data.position);
+  const priority = data.priority;
+  const dueDate = data.due_date ?? data.dueDate;
+  const recurringRule = data.recurring_rule ?? data.recurringRule;
+  const pinned = data.pinned;
+  const assignedTo = normalizeOptionalInt(data.assigned_to ?? data.assignedTo);
+  const updatedBy = normalizeOptionalInt(data.updated_by ?? data.updatedBy);
+
+  return new Promise((resolve, reject) => {
+    db.get('SELECT * FROM tasks WHERE id = ?', [id], (err, currentTask) => {
+      if (err) {
+        return reject({ status: 500, message: err.message });
+      }
+
+      if (!currentTask) {
+        return reject({ status: 404, message: 'Task not found' });
+      }
+
+      const updates = [];
+      const values = [];
+
+      if (title !== undefined) {
+        updates.push('title = ?');
+        values.push(title);
+        if (title !== currentTask.title) {
+          recordTaskHistory(id, 'title_changed', currentTask.title, title, updatedBy);
+        }
+      }
+
+      if (description !== undefined) {
+        updates.push('description = ?');
+        values.push(description);
+        if (description !== currentTask.description) {
+          recordTaskHistory(id, 'description_changed', currentTask.description, description, updatedBy);
+        }
+      }
+
+      if (columnId !== undefined) {
+        updates.push('column_id = ?');
+        values.push(columnId);
+        if (columnId !== currentTask.column_id) {
+          recordTaskHistory(id, 'column_changed', currentTask.column_id, columnId, updatedBy);
+          triggerAutomation('task_moved', {
+            taskId: Number(id),
+            oldColumnId: currentTask.column_id,
+            newColumnId: columnId,
+          });
+        }
+      }
+
+      if (swimlaneId !== undefined) {
+        updates.push('swimlane_id = ?');
+        values.push(swimlaneId);
+        if (swimlaneId !== currentTask.swimlane_id) {
+          recordTaskHistory(id, 'swimlane_changed', currentTask.swimlane_id, swimlaneId, updatedBy);
+        }
+      }
+
+      if (position !== undefined) {
+        updates.push('position = ?');
+        values.push(position);
+      }
+
+      if (priority !== undefined) {
+        updates.push('priority = ?');
+        values.push(priority);
+        if (priority !== currentTask.priority) {
+          recordTaskHistory(id, 'priority_changed', currentTask.priority, priority, updatedBy);
+        }
+      }
+
+      if (dueDate !== undefined) {
+        updates.push('due_date = ?');
+        values.push(dueDate);
+        if (dueDate !== currentTask.due_date) {
+          recordTaskHistory(id, 'due_date_changed', currentTask.due_date, dueDate, updatedBy);
+        }
+      }
+
+      if (recurringRule !== undefined) {
+        updates.push('recurring_rule = ?');
+        values.push(recurringRule);
+      }
+
+      if (pinned !== undefined) {
+        updates.push('pinned = ?');
+        values.push(pinned);
+      }
+
+      if (assignedTo !== undefined) {
+        updates.push('assigned_to = ?');
+        values.push(assignedTo);
+        if (assignedTo !== currentTask.assigned_to) {
+          recordTaskHistory(id, 'assignment_changed', currentTask.assigned_to, assignedTo, updatedBy);
+        }
+      }
+
+      if (updates.length === 0) {
+        return reject({ status: 400, message: 'No valid fields to update' });
+      }
+
+      updates.push('updated_at = CURRENT_TIMESTAMP');
+      values.push(id);
+
+      db.run(
+        `UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`,
+        values,
+        function(updateErr) {
+          if (updateErr) {
+            return reject({ status: 500, message: updateErr.message });
+          }
+
+          resolve({ message: 'Task updated successfully' });
+        }
+      );
+    });
+  });
+}
+
+async function deleteTaskRecord(id, data) {
+  const deletedBy = normalizeOptionalInt(data?.deleted_by ?? data?.deletedBy, { treatUndefinedAsNull: true });
+
+  return new Promise((resolve, reject) => {
+    db.get('SELECT * FROM tasks WHERE id = ?', [id], (err, task) => {
+      if (err) {
+        return reject({ status: 500, message: err.message });
+      }
+
+      if (!task) {
+        return reject({ status: 404, message: 'Task not found' });
+      }
+
+      db.run('DELETE FROM tasks WHERE id = ?', [id], function(deleteErr) {
+        if (deleteErr) {
+          return reject({ status: 500, message: deleteErr.message });
+        }
+
+        recordTaskHistory(id, 'deleted', null, null, deletedBy);
+
+        triggerAutomation('task_deleted', {
+          taskId: Number(id),
+          columnId: task.column_id,
+        });
+
+        resolve({ message: 'Task deleted successfully' });
+      });
+    });
+  });
+}
+
+function handleTaskError(res, error) {
+  if (!error) {
+    return res.status(500).json({ error: 'Unknown error' });
+  }
+
+  if (error.status) {
+    return res.status(error.status).json({ error: error.message });
+  }
+
+  const message = error.message || error.toString();
+  return res.status(500).json({ error: message });
+}
