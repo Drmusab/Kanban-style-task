@@ -1,9 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
-const { db } = require('../utils/database');
-const { triggerWebhook } = require('../services/webhook');
-const { sendNotification } = require('../services/notifications');
+const { db, getAsync, runAsync } = require('../utils/database');
+const { checkTriggerConditions, executeAutomationAction } = require('../services/automation');
 
 // Get all automation rules
 router.get('/', (req, res) => {
@@ -219,108 +218,79 @@ router.get('/logs', (req, res) => {
 // Manually trigger an automation rule
 router.post('/:id/trigger', async (req, res) => {
   const { id } = req.params;
-  const { payload } = req.body;
-  
-  // Get the rule
-  db.get(
-    'SELECT * FROM automation_rules WHERE id = ? AND enabled = 1',
-    [id],
-    async (err, rule) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      
-      if (!rule) {
-        return res.status(404).json({ error: 'Automation rule not found or disabled' });
-      }
-      
-      try {
-        const triggerConfig = JSON.parse(rule.trigger_config);
-        const actionConfig = JSON.parse(rule.action_config);
-        
-        // Check if trigger conditions are met
-        let triggerMet = true;
-        
-        if (rule.trigger_type === 'task_moved') {
-          if (triggerConfig.columnId && payload.columnId !== triggerConfig.columnId) {
-            triggerMet = false;
-          }
-          
-          if (triggerConfig.priority && payload.priority !== triggerConfig.priority) {
-            triggerMet = false;
-          }
-        }
-        
-        if (!triggerMet) {
-          return res.status(400).json({ error: 'Trigger conditions not met' });
-        }
-        
-        // Execute the action
-        let actionResult = { success: false };
-        
-        if (rule.action_type === 'webhook') {
-          actionResult = await triggerWebhook(actionConfig.webhookId, payload);
-        } else if (rule.action_type === 'notification') {
-          actionResult = await sendNotification(actionConfig.title, actionConfig.message);
-        } else if (rule.action_type === 'move_task') {
-          // Move task to another column
-          db.run(
-            'UPDATE tasks SET column_id = ? WHERE id = ?',
-            [actionConfig.columnId, payload.taskId],
-            function(err) {
-              if (err) {
-                actionResult = { success: false, error: err.message };
-              } else {
-                actionResult = { success: true, message: 'Task moved successfully' };
-              }
-            }
-          );
-        }
-        
-        // Log the automation execution
-        db.run(
-          'INSERT INTO automation_logs (rule_id, status, message) VALUES (?, ?, ?)',
-          [id, actionResult.success ? 'success' : 'failed', actionResult.message || actionResult.error],
-          function(err) {
-            if (err) {
-              console.error('Failed to log automation execution:', err);
-            }
-          }
-        );
-        
-        if (actionResult.success) {
-          res.json({
-            success: true,
-            message: 'Automation rule triggered successfully',
-            result: actionResult
-          });
-        } else {
-          res.status(400).json({
-            success: false,
-            message: 'Automation rule execution failed',
-            error: actionResult.error
-          });
-        }
-      } catch (error) {
-        // Log the automation execution
-        db.run(
-          'INSERT INTO automation_logs (rule_id, status, message) VALUES (?, ?, ?)',
-          [id, 'failed', error.message],
-          function(err) {
-            if (err) {
-              console.error('Failed to log automation execution:', err);
-            }
-          }
-        );
-        
-        res.status(500).json({
-          success: false,
-          message: 'Automation rule execution failed',
-          error: error.message
-        });
-      }
+  const payload = req.body?.payload ?? {};
+
+  let rule;
+  try {
+    rule = await getAsync('SELECT * FROM automation_rules WHERE id = ? AND enabled = 1', [id]);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+
+  if (!rule) {
+    return res.status(404).json({ error: 'Automation rule not found or disabled' });
+  }
+
+  try {
+    let triggerConfig;
+    let actionConfig;
+
+    try {
+      triggerConfig = JSON.parse(rule.trigger_config);
+    } catch (error) {
+      throw new Error('Invalid trigger configuration');
     }
-  );
+
+    try {
+      actionConfig = JSON.parse(rule.action_config);
+    } catch (error) {
+      throw new Error('Invalid action configuration');
+    }
+
+    if (!checkTriggerConditions(triggerConfig, payload)) {
+      return res.status(400).json({ error: 'Trigger conditions not met' });
+    }
+
+    const actionResult = await executeAutomationAction(rule.action_type, actionConfig, payload);
+
+    await runAsync(
+      'INSERT INTO automation_logs (rule_id, status, message) VALUES (?, ?, ?)',
+      [
+        id,
+        actionResult?.success === false ? 'failed' : 'success',
+        actionResult?.message || actionResult?.error || 'Manual trigger',
+      ]
+    );
+
+    if (actionResult?.success === false) {
+      return res.status(400).json({
+        success: false,
+        message: 'Automation rule execution failed',
+        error: actionResult.error,
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Automation rule triggered successfully',
+      result: actionResult,
+    });
+  } catch (error) {
+    try {
+      await runAsync(
+        'INSERT INTO automation_logs (rule_id, status, message) VALUES (?, ?, ?)',
+        [id, 'failed', error.message]
+      );
+    } catch (logError) {
+      console.error('Failed to log automation execution:', logError);
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: 'Automation rule execution failed',
+      error: error.message,
+    });
+  }
 });
 
 module.exports = router;
