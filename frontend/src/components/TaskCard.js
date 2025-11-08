@@ -62,7 +62,6 @@ const TaskCard = ({ task, index, onEdit }) => {
   return (
     <Card
       sx={{
-        mb: 1,
         cursor: 'pointer',
         border: task.pinned ? '2px solid #3498db' : '1px solid #e0e0e0',
         backgroundColor: task.pinned ? '#f8f9fa' : 'white'

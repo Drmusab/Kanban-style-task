@@ -6,17 +6,9 @@ import {
   Typography,
   Button,
   IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  Grid,
-  Chip,
   Menu,
   MenuItem,
-  Divider,
-  useTheme
+  Divider
 } from '@mui/material';
 import {
   Add,
@@ -31,17 +23,30 @@ import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-import { getBoard, getTasks, updateTask } from '../services/taskService';
-import { updateColumn, updateSwimlane } from '../services/boardService';
+import { getTasks, updateTask, createTask } from '../services/taskService';
+import {
+  getBoard,
+  updateColumn,
+  updateSwimlane,
+  createColumn,
+  createSwimlane,
+  deleteColumn,
+  deleteSwimlane
+} from '../services/boardService';
 import { useNotification } from '../contexts/NotificationContext';
 import TaskCard from '../components/TaskCard';
 import TaskDialog from '../components/TaskDialog';
 import ColumnDialog from '../components/ColumnDialog';
 import SwimlaneDialog from '../components/SwimlaneDialog';
+import {
+  buildDroppableId,
+  groupTasksByColumnAndSwimlane,
+  parseDroppableId,
+  reorderTasksAfterMove
+} from '../utils/boardUtils';
 
 const Board = () => {
   const { id } = useParams();
-  const theme = useTheme();
   const { showSuccess, showError } = useNotification();
   
   const [board, setBoard] = useState(null);
@@ -91,80 +96,87 @@ const Board = () => {
     }
 
     if (type === 'column') {
-      // Reordering columns
-      const newColumns = Array.from(board.columns);
-      const [movedColumn] = newColumns.splice(source.index, 1);
-      newColumns.splice(destination.index, 0, movedColumn);
+      if (!board || !Array.isArray(board.columns)) {
+        return;
+      }
 
-      // Update positions in the database
-      const updatePromises = newColumns.map((column, index) => {
-        return updateColumn(board.id, column.id, { position: index });
-      });
+      const reorderedColumns = Array.from(board.columns);
+      const [movedColumn] = reorderedColumns.splice(source.index, 1);
+      reorderedColumns.splice(destination.index, 0, movedColumn);
+
+      const columnsWithUpdatedPositions = reorderedColumns.map((column, index) => ({
+        ...column,
+        position: index,
+      }));
 
       try {
-        await Promise.all(updatePromises);
-        setBoard({ ...board, columns: newColumns });
+        await Promise.all(
+          columnsWithUpdatedPositions.map(column =>
+            updateColumn(board.id, column.id, { position: column.position })
+          )
+        );
+
+        setBoard(prev => (prev ? { ...prev, columns: columnsWithUpdatedPositions } : prev));
         showSuccess('Columns reordered successfully');
       } catch (error) {
         showError('Failed to reorder columns');
+        try {
+          const boardResponse = await getBoard(id);
+          setBoard(boardResponse.data);
+        } catch (refreshError) {
+          console.error('Failed to refresh board after column reorder error:', refreshError);
+        }
       }
       return;
     }
 
-    // Moving tasks between columns or swimlanes
-    const [columnId, swimlaneId] = destination.droppableId.split('-');
-    const [sourceColumnId, sourceSwimlaneId] = source.droppableId.split('-');
+    const task = tasks.find(t => String(t.id) === String(draggableId));
+    if (!task) {
+      return;
+    }
 
-    // Find the task
-    const task = tasks.find(t => t.id === draggableId);
-    if (!task) return;
+    const destinationLocation = parseDroppableId(destination.droppableId);
+    const sourceLocation = parseDroppableId(source.droppableId);
 
-    // Update the task
-    const updatedTask = {
-      ...task,
-      column_id: parseInt(columnId),
-      swimlane_id: swimlaneId === 'null' ? null : parseInt(swimlaneId),
-      position: destination.index
-    };
+    if (!destinationLocation || !sourceLocation) {
+      return;
+    }
+
+    const updatedTasks = reorderTasksAfterMove(
+      tasks,
+      draggableId,
+      source.droppableId,
+      destination.droppableId,
+      destination.index
+    );
 
     try {
-      await updateTask(task.id, updatedTask);
-      
-      // Update local state
-      const newTasks = Array.from(tasks);
-      const taskIndex = newTasks.findIndex(t => t.id === draggableId);
-      newTasks[taskIndex] = updatedTask;
-      
-      // Reorder tasks in the destination column/swimlane
-      const destinationTasks = newTasks.filter(t => 
-        t.column_id === parseInt(columnId) && 
-        (swimlaneId === 'null' ? t.swimlane_id === null : t.swimlane_id === parseInt(swimlaneId))
-      );
-      
-      destinationTasks.sort((a, b) => a.position - b.position);
-      
-      // Update positions
-      destinationTasks.forEach((t, index) => {
-        if (t.id === draggableId) {
-          t.position = destination.index;
-        } else if (t.position >= destination.index) {
-          t.position += 1;
-        }
+      await updateTask(task.id, {
+        column_id: destinationLocation.columnId,
+        swimlane_id: destinationLocation.swimlaneId,
+        position: destination.index,
       });
-      
-      setTasks(newTasks);
+
+      setTasks(updatedTasks);
       showSuccess('Task moved successfully');
     } catch (error) {
       showError('Failed to move task');
+      try {
+        const tasksResponse = await getTasks({ boardId: id });
+        setTasks(tasksResponse.data);
+      } catch (refreshError) {
+        console.error('Failed to refresh tasks after move error:', refreshError);
+      }
     }
   };
 
   const handleAddTask = (columnId, swimlaneId = null) => {
+    const normalizedSwimlaneId = swimlaneId === undefined ? null : swimlaneId;
     setSelectedTask({
       title: '',
       description: '',
       column_id: columnId,
-      swimlane_id: swimlaneId,
+      swimlane_id: normalizedSwimlaneId,
       priority: 'medium',
       tags: [],
       subtasks: []
@@ -183,8 +195,7 @@ const Board = () => {
         await updateTask(task.id, task);
         showSuccess('Task updated successfully');
       } else {
-        // Create new task
-        const response = await createTask(task);
+        await createTask(task);
         showSuccess('Task created successfully');
       }
       
@@ -204,7 +215,7 @@ const Board = () => {
       name: '',
       color: '#3498db',
       icon: '',
-      position: board.columns.length
+      position: board?.columns?.length ?? 0
     });
     setColumnDialogOpen(true);
   };
@@ -220,8 +231,7 @@ const Board = () => {
         await updateColumn(board.id, column.id, column);
         showSuccess('Column updated successfully');
       } else {
-        // Create new column
-        const response = await createColumn(board.id, column);
+        await createColumn(board.id, column);
         showSuccess('Column created successfully');
       }
       
@@ -240,7 +250,7 @@ const Board = () => {
     setSelectedSwimlane({
       name: '',
       color: '#ecf0f1',
-      position: board.swimlanes.length,
+      position: board?.swimlanes?.length ?? 0,
       collapsed: false
     });
     setSwimlaneDialogOpen(true);
@@ -257,8 +267,7 @@ const Board = () => {
         await updateSwimlane(board.id, swimlane.id, swimlane);
         showSuccess('Swimlane updated successfully');
       } else {
-        // Create new swimlane
-        const response = await createSwimlane(board.id, swimlane);
+        await createSwimlane(board.id, swimlane);
         showSuccess('Swimlane created successfully');
       }
       
@@ -293,14 +302,55 @@ const Board = () => {
     setSelectedSwimlaneForMenu(null);
   };
 
+  const refreshBoardAndTasks = async () => {
+    const [boardResponse, tasksResponse] = await Promise.all([
+      getBoard(id),
+      getTasks({ boardId: id })
+    ]);
+
+    setBoard(boardResponse.data);
+    setTasks(tasksResponse.data);
+  };
+
+  const handleDeleteColumn = async (column) => {
+    if (!column) {
+      return;
+    }
+
+    try {
+      await deleteColumn(board.id, column.id);
+      await refreshBoardAndTasks();
+      showSuccess('Column deleted successfully');
+    } catch (error) {
+      showError('Failed to delete column');
+    } finally {
+      handleColumnMenuClose();
+    }
+  };
+
+  const handleDeleteSwimlane = async (swimlane) => {
+    if (!swimlane) {
+      return;
+    }
+
+    try {
+      await deleteSwimlane(board.id, swimlane.id);
+      await refreshBoardAndTasks();
+      showSuccess('Swimlane deleted successfully');
+    } catch (error) {
+      showError('Failed to delete swimlane');
+    } finally {
+      handleSwimlaneMenuClose();
+    }
+  };
+
   const toggleSwimlaneCollapse = async (swimlane) => {
     try {
-      await updateSwimlane(board.id, swimlane.id, { collapsed: !swimlane.collapsed });
-      
-      // Refresh board
+      await updateSwimlane(board.id, swimlane.id, { collapsed: swimlane.collapsed ? 0 : 1 });
+
       const boardResponse = await getBoard(id);
       setBoard(boardResponse.data);
-      
+
       showSuccess(`Swimlane ${swimlane.collapsed ? 'expanded' : 'collapsed'} successfully`);
     } catch (error) {
       showError('Failed to toggle swimlane');
@@ -315,37 +365,7 @@ const Board = () => {
     return <Typography>Board not found</Typography>;
   }
 
-  // Group tasks by column and swimlane
-  const tasksByColumnAndSwimlane = {};
-  
-  board.columns.forEach(column => {
-    tasksByColumnAndSwimlane[column.id] = {};
-    
-    // Initialize with null swimlane (tasks without swimlane)
-    tasksByColumnAndSwimlane[column.id]['null'] = [];
-    
-    // Initialize with all swimlanes
-    board.swimlanes.forEach(swimlane => {
-      tasksByColumnAndSwimlane[column.id][swimlane.id] = [];
-    });
-  });
-  
-  // Populate tasks
-  tasks.forEach(task => {
-    const columnId = task.column_id;
-    const swimlaneId = task.swimlane_id || 'null';
-    
-    if (tasksByColumnAndSwimlane[columnId] && tasksByColumnAndSwimlane[columnId][swimlaneId]) {
-      tasksByColumnAndSwimlane[columnId][swimlaneId].push(task);
-    }
-  });
-  
-  // Sort tasks by position
-  Object.keys(tasksByColumnAndSwimlane).forEach(columnId => {
-    Object.keys(tasksByColumnAndSwimlane[columnId]).forEach(swimlaneId => {
-      tasksByColumnAndSwimlane[columnId][swimlaneId].sort((a, b) => a.position - b.position);
-    });
-  });
+  const tasksByColumnAndSwimlane = groupTasksByColumnAndSwimlane(board, tasks);
 
   return (
     <Box sx={{ p: 2 }}>
@@ -387,7 +407,7 @@ const Board = () => {
               sx={{ display: 'flex', gap: 2, overflowX: 'auto', pb: 2 }}
             >
               {board.columns.map((column, columnIndex) => (
-                <Draggable key={column.id} draggableId={column.id} index={columnIndex}>
+                <Draggable key={column.id} draggableId={column.id.toString()} index={columnIndex}>
                   {(provided, snapshot) => (
                     <Paper
                       ref={provided.innerRef}
@@ -434,9 +454,9 @@ const Board = () => {
                         </Button>
                       </Box>
                       
-                      {board.swimlanes.length > 0 ? (
-                        // Render swimlanes
-                        board.swimlanes.map(swimlane => (
+      {(board.swimlanes?.length ?? 0) > 0 ? (
+        // Render swimlanes
+        board.swimlanes.map(swimlane => (
                           <Box
                             key={swimlane.id}
                             sx={{
@@ -472,7 +492,7 @@ const Board = () => {
                             
                             {!swimlane.collapsed && (
                               <Droppable
-                                droppableId={`${column.id}-${swimlane.id}`}
+                                droppableId={buildDroppableId(column.id, swimlane.id)}
                                 type="task"
                               >
                                 {(provided, snapshot) => (
@@ -486,13 +506,27 @@ const Board = () => {
                                       p: 1
                                     }}
                                   >
-                                    {tasksByColumnAndSwimlane[column.id][swimlane.id].map((task, index) => (
-                                      <TaskCard
+                                    {(tasksByColumnAndSwimlane[column.id]?.[swimlane.id] || []).map((task, index) => (
+                                      <Draggable
                                         key={task.id}
-                                        task={task}
+                                        draggableId={task.id.toString()}
                                         index={index}
-                                        onEdit={handleEditTask}
-                                      />
+                                      >
+                                        {(taskProvided) => (
+                                          <Box
+                                            ref={taskProvided.innerRef}
+                                            {...taskProvided.draggableProps}
+                                            {...taskProvided.dragHandleProps}
+                                            sx={{ mb: 1, '&:last-child': { mb: 0 } }}
+                                          >
+                                            <TaskCard
+                                              task={task}
+                                              index={index}
+                                              onEdit={handleEditTask}
+                                            />
+                                          </Box>
+                                        )}
+                                      </Draggable>
                                     ))}
                                     {provided.placeholder}
                                   </Box>
@@ -503,7 +537,7 @@ const Board = () => {
                         ))
                       ) : (
                         // Render tasks without swimlanes
-                        <Droppable droppableId={`${column.id}-null`} type="task">
+                        <Droppable droppableId={buildDroppableId(column.id, null)} type="task">
                           {(provided, snapshot) => (
                             <Box
                               ref={provided.innerRef}
@@ -515,13 +549,27 @@ const Board = () => {
                                 p: 1
                               }}
                             >
-                              {tasksByColumnAndSwimlane[column.id]['null'].map((task, index) => (
-                                <TaskCard
+                              {(tasksByColumnAndSwimlane[column.id]?.['null'] || []).map((task, index) => (
+                                <Draggable
                                   key={task.id}
-                                  task={task}
+                                  draggableId={task.id.toString()}
                                   index={index}
-                                  onEdit={handleEditTask}
-                                />
+                                >
+                                  {(taskProvided) => (
+                                    <Box
+                                      ref={taskProvided.innerRef}
+                                      {...taskProvided.draggableProps}
+                                      {...taskProvided.dragHandleProps}
+                                      sx={{ mb: 1, '&:last-child': { mb: 0 } }}
+                                    >
+                                      <TaskCard
+                                        task={task}
+                                        index={index}
+                                        onEdit={handleEditTask}
+                                      />
+                                    </Box>
+                                  )}
+                                </Draggable>
                               ))}
                               {provided.placeholder}
                             </Box>
@@ -568,17 +616,22 @@ const Board = () => {
         open={Boolean(columnMenuAnchor)}
         onClose={handleColumnMenuClose}
       >
-        <MenuItem onClick={() => {
-          handleEditColumn(selectedColumnForMenu);
-          handleColumnMenuClose();
-        }}>
+        <MenuItem
+          disabled={!selectedColumnForMenu}
+          onClick={() => {
+            if (selectedColumnForMenu) {
+              handleEditColumn(selectedColumnForMenu);
+            }
+            handleColumnMenuClose();
+          }}
+        >
           <Edit sx={{ mr: 1 }} /> Edit
         </MenuItem>
         <Divider />
-        <MenuItem onClick={() => {
-          // Handle delete column
-          handleColumnMenuClose();
-        }}>
+        <MenuItem
+          disabled={!selectedColumnForMenu}
+          onClick={() => handleDeleteColumn(selectedColumnForMenu)}
+        >
           <Delete sx={{ mr: 1 }} /> Delete
         </MenuItem>
       </Menu>
@@ -589,17 +642,22 @@ const Board = () => {
         open={Boolean(swimlaneMenuAnchor)}
         onClose={handleSwimlaneMenuClose}
       >
-        <MenuItem onClick={() => {
-          handleEditSwimlane(selectedSwimlaneForMenu);
-          handleSwimlaneMenuClose();
-        }}>
+        <MenuItem
+          disabled={!selectedSwimlaneForMenu}
+          onClick={() => {
+            if (selectedSwimlaneForMenu) {
+              handleEditSwimlane(selectedSwimlaneForMenu);
+            }
+            handleSwimlaneMenuClose();
+          }}
+        >
           <Edit sx={{ mr: 1 }} /> Edit
         </MenuItem>
         <Divider />
-        <MenuItem onClick={() => {
-          // Handle delete swimlane
-          handleSwimlaneMenuClose();
-        }}>
+        <MenuItem
+          disabled={!selectedSwimlaneForMenu}
+          onClick={() => handleDeleteSwimlane(selectedSwimlaneForMenu)}
+        >
           <Delete sx={{ mr: 1 }} /> Delete
         </MenuItem>
       </Menu>
