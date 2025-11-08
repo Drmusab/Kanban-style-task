@@ -3,15 +3,19 @@ const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcryptjs');
 
-const DB_PATH = path.join(__dirname, '../../data/kanban.db');
+const DEFAULT_DB_PATH = path.join(__dirname, '../../data/kanban.db');
+const configuredPath = process.env.DATABASE_PATH || DEFAULT_DB_PATH;
+const isInMemoryDatabase = configuredPath === ':memory:' || configuredPath === 'memory';
+const resolvedPath = isInMemoryDatabase ? ':memory:' : configuredPath;
 
-// Ensure data directory exists
-const dataDir = path.dirname(DB_PATH);
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+if (!isInMemoryDatabase) {
+  const dataDir = path.dirname(resolvedPath);
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
 }
 
-const db = new sqlite3.Database(DB_PATH);
+const db = new sqlite3.Database(resolvedPath);
 
 const runAsync = (sql, params = []) => {
   return new Promise((resolve, reject) => {
@@ -279,4 +283,34 @@ const initDatabase = () => {
   });
 };
 
-module.exports = { db, initDatabase, runAsync, getAsync, allAsync };
+const TABLES_IN_DELETE_ORDER = [
+  'automation_logs',
+  'task_history',
+  'attachments',
+  'subtasks',
+  'task_tags',
+  'tasks',
+  'swimlanes',
+  'columns',
+  'boards',
+  'automation_rules',
+  'integrations',
+  'tags',
+  'users'
+];
+
+const clearDatabase = async () => {
+  for (const table of TABLES_IN_DELETE_ORDER) {
+    try {
+      await runAsync(`DELETE FROM ${table}`);
+    } catch (error) {
+      if (error.message && error.message.includes('no such table')) {
+        // Skip tables that are not present in the current schema
+        continue;
+      }
+      throw error;
+    }
+  }
+};
+
+module.exports = { db, initDatabase, runAsync, getAsync, allAsync, clearDatabase };
