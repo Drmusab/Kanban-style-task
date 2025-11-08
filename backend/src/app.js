@@ -11,6 +11,7 @@ const boardRoutes = require('./routes/boards');
 const userRoutes = require('./routes/users');
 const integrationRoutes = require('./routes/integrations');
 const automationRoutes = require('./routes/automation');
+const syncRoutes = require('./routes/sync');
 const { startScheduler } = require('./services/scheduler');
 
 const app = express();
@@ -44,6 +45,7 @@ app.use('/api/boards', boardRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/integrations', integrationRoutes);
 app.use('/api/automation', automationRoutes);
+app.use('/api/sync', syncRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

@@ -1,4 +1,4 @@
-import type { IDataObject, IExecuteFunctions, ILoadOptionsFunctions } from 'n8n-core';
+import type { IDataObject, IExecuteFunctions, ILoadOptionsFunctions, ITriggerFunctions } from 'n8n-core';
 import type { OptionsWithUri } from 'request';
 
 interface KanbanCredentials {
@@ -7,7 +7,7 @@ interface KanbanCredentials {
 }
 
 export async function kanbanApiRequest(
-  this: IExecuteFunctions | ILoadOptionsFunctions,
+  this: IExecuteFunctions | ILoadOptionsFunctions | ITriggerFunctions,
   method: string,
   endpoint: string,
   body: IDataObject = {},

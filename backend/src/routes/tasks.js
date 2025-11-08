@@ -5,6 +5,7 @@ const { db } = require('../utils/database');
 const { recordTaskHistory } = require('../utils/history');
 const { triggerAutomation } = require('../services/automation');
 const apiKeyAuth = require('../middleware/apiKeyAuth');
+const { emitEvent } = require('../services/eventBus');
 
 const createTaskValidations = [
   body('title').notEmpty().withMessage('Title is required'),
@@ -531,14 +532,25 @@ async function createTaskRecord(data) {
             recordTaskHistory(taskId, 'created', null, null, createdBy);
 
             const finalize = () => {
-              triggerAutomation('task_created', {
-                taskId,
-                columnId,
-                priority,
-                assignedTo,
-              });
+              db.get('SELECT * FROM tasks WHERE id = ?', [taskId], (fetchErr, taskRow) => {
+                if (fetchErr) {
+                  return reject({ status: 500, message: fetchErr.message });
+                }
 
-              resolve({ id: taskId });
+                emitEvent('task', 'created', {
+                  task: taskRow,
+                  tags: tagIds,
+                });
+
+                triggerAutomation('task_created', {
+                  taskId,
+                  columnId,
+                  priority,
+                  assignedTo,
+                });
+
+                resolve({ id: taskId, task: taskRow });
+              });
             };
 
             if (tagIds.length === 0) {
@@ -595,10 +607,12 @@ async function updateTaskRecord(id, data) {
 
       const updates = [];
       const values = [];
+      const updatedFields = {};
 
       if (title !== undefined) {
         updates.push('title = ?');
         values.push(title);
+        updatedFields.title = title;
         if (title !== currentTask.title) {
           recordTaskHistory(id, 'title_changed', currentTask.title, title, updatedBy);
         }
@@ -607,6 +621,7 @@ async function updateTaskRecord(id, data) {
       if (description !== undefined) {
         updates.push('description = ?');
         values.push(description);
+        updatedFields.description = description;
         if (description !== currentTask.description) {
           recordTaskHistory(id, 'description_changed', currentTask.description, description, updatedBy);
         }
@@ -615,6 +630,7 @@ async function updateTaskRecord(id, data) {
       if (columnId !== undefined) {
         updates.push('column_id = ?');
         values.push(columnId);
+        updatedFields.column_id = columnId;
         if (columnId !== currentTask.column_id) {
           recordTaskHistory(id, 'column_changed', currentTask.column_id, columnId, updatedBy);
           triggerAutomation('task_moved', {
@@ -628,6 +644,7 @@ async function updateTaskRecord(id, data) {
       if (swimlaneId !== undefined) {
         updates.push('swimlane_id = ?');
         values.push(swimlaneId);
+        updatedFields.swimlane_id = swimlaneId;
         if (swimlaneId !== currentTask.swimlane_id) {
           recordTaskHistory(id, 'swimlane_changed', currentTask.swimlane_id, swimlaneId, updatedBy);
         }
@@ -636,11 +653,13 @@ async function updateTaskRecord(id, data) {
       if (position !== undefined) {
         updates.push('position = ?');
         values.push(position);
+        updatedFields.position = position;
       }
 
       if (priority !== undefined) {
         updates.push('priority = ?');
         values.push(priority);
+        updatedFields.priority = priority;
         if (priority !== currentTask.priority) {
           recordTaskHistory(id, 'priority_changed', currentTask.priority, priority, updatedBy);
         }
@@ -649,6 +668,7 @@ async function updateTaskRecord(id, data) {
       if (dueDate !== undefined) {
         updates.push('due_date = ?');
         values.push(dueDate);
+        updatedFields.due_date = dueDate;
         if (dueDate !== currentTask.due_date) {
           recordTaskHistory(id, 'due_date_changed', currentTask.due_date, dueDate, updatedBy);
         }
@@ -657,16 +677,19 @@ async function updateTaskRecord(id, data) {
       if (recurringRule !== undefined) {
         updates.push('recurring_rule = ?');
         values.push(recurringRule);
+        updatedFields.recurring_rule = recurringRule;
       }
 
       if (pinned !== undefined) {
         updates.push('pinned = ?');
         values.push(pinned);
+        updatedFields.pinned = pinned;
       }
 
       if (assignedTo !== undefined) {
         updates.push('assigned_to = ?');
         values.push(assignedTo);
+        updatedFields.assigned_to = assignedTo;
         if (assignedTo !== currentTask.assigned_to) {
           recordTaskHistory(id, 'assignment_changed', currentTask.assigned_to, assignedTo, updatedBy);
         }
@@ -687,7 +710,19 @@ async function updateTaskRecord(id, data) {
             return reject({ status: 500, message: updateErr.message });
           }
 
-          resolve({ message: 'Task updated successfully' });
+          db.get('SELECT * FROM tasks WHERE id = ?', [id], (fetchErr, updatedTask) => {
+            if (fetchErr) {
+              return reject({ status: 500, message: fetchErr.message });
+            }
+
+            emitEvent('task', 'updated', {
+              id: Number(id),
+              changes: updatedFields,
+              task: updatedTask,
+            });
+
+            resolve({ message: 'Task updated successfully', task: updatedTask, changes: updatedFields });
+          });
         }
       );
     });
@@ -719,7 +754,13 @@ async function deleteTaskRecord(id, data) {
           columnId: task.column_id,
         });
 
-        resolve({ message: 'Task deleted successfully' });
+        emitEvent('task', 'deleted', {
+          id: Number(id),
+          deletedBy,
+          task,
+        });
+
+        resolve({ message: 'Task deleted successfully', task });
       });
     });
   });
