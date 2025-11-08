@@ -126,6 +126,10 @@ POST /api/automation - Create a new automation rule
 PUT /api/automation/:id - Update an automation rule
 DELETE /api/automation/:id - Delete an automation rule
 POST /api/automation/:id/trigger - Manually trigger an automation rule
+
+Sync
+GET /api/sync/events - Retrieve recent board and task change events for polling integrations
+GET /api/sync/stream - Establish a Server-Sent Events stream for real-time updates
 Development
 Running in Development Mode
 Install dependencies:

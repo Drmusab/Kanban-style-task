@@ -38,6 +38,10 @@ export class KanbanApp implements INodeType {
             name: 'Board',
             value: 'board',
           },
+          {
+            name: 'Synchronization',
+            value: 'sync',
+          },
         ],
         default: 'task',
       },
@@ -118,6 +122,25 @@ export class KanbanApp implements INodeType {
           },
         ],
         default: 'getAll',
+      },
+      {
+        displayName: 'Operation',
+        name: 'operation',
+        type: 'options',
+        noDataExpression: true,
+        displayOptions: {
+          show: {
+            resource: ['sync'],
+          },
+        },
+        options: [
+          {
+            name: 'Get Updates',
+            value: 'getUpdates',
+            action: 'Retrieve update events for tasks and boards',
+          },
+        ],
+        default: 'getUpdates',
       },
       {
         displayName: 'Task ID',
@@ -354,6 +377,99 @@ export class KanbanApp implements INodeType {
         ],
       },
       {
+        displayName: 'Event Types',
+        name: 'eventTypes',
+        type: 'multiOptions',
+        default: [
+          'task.created',
+          'task.updated',
+          'task.deleted',
+          'board.created',
+          'board.updated',
+          'board.deleted',
+        ],
+        options: [
+          {
+            name: 'Task Created',
+            value: 'task.created',
+          },
+          {
+            name: 'Task Updated',
+            value: 'task.updated',
+          },
+          {
+            name: 'Task Deleted',
+            value: 'task.deleted',
+          },
+          {
+            name: 'Board Created',
+            value: 'board.created',
+          },
+          {
+            name: 'Board Updated',
+            value: 'board.updated',
+          },
+          {
+            name: 'Board Deleted',
+            value: 'board.deleted',
+          },
+        ],
+        displayOptions: {
+          show: {
+            resource: ['sync'],
+            operation: ['getUpdates'],
+          },
+        },
+        description: 'Filter events by type. Leave empty to include all events.',
+      },
+      {
+        displayName: 'Initial Lookback (minutes)',
+        name: 'initialLookback',
+        type: 'number',
+        default: 5,
+        typeOptions: {
+          minValue: 0,
+          maxValue: 1440,
+        },
+        displayOptions: {
+          show: {
+            resource: ['sync'],
+            operation: ['getUpdates'],
+          },
+        },
+        description: 'How far back to look for events when no last event ID is provided',
+      },
+      {
+        displayName: 'Last Event ID',
+        name: 'lastEventId',
+        type: 'string',
+        default: '',
+        displayOptions: {
+          show: {
+            resource: ['sync'],
+            operation: ['getUpdates'],
+          },
+        },
+        description: 'Resume from a specific event identifier',
+      },
+      {
+        displayName: 'Maximum Events',
+        name: 'syncLimit',
+        type: 'number',
+        default: 100,
+        typeOptions: {
+          minValue: 1,
+          maxValue: 500,
+        },
+        displayOptions: {
+          show: {
+            resource: ['sync'],
+            operation: ['getUpdates'],
+          },
+        },
+        description: 'Maximum number of events to fetch per request',
+      },
+      {
         displayName: 'Return All',
         name: 'returnAll',
         type: 'boolean',
@@ -398,6 +514,8 @@ export class KanbanApp implements INodeType {
           responseData = await this.handleTaskOperation(itemIndex, operation);
         } else if (resource === 'board') {
           responseData = await this.handleBoardOperation(itemIndex, operation);
+        } else if (resource === 'sync') {
+          responseData = await this.handleSyncOperation(itemIndex, operation);
         } else {
           throw new Error(`Unsupported resource: ${resource}`);
         }
@@ -587,5 +705,43 @@ export class KanbanApp implements INodeType {
     }
 
     return payload;
+  }
+
+  private async handleSyncOperation(itemIndex: number, operation: string): Promise<IDataObject[]> {
+    if (operation !== 'getUpdates') {
+      throw new Error(`Unsupported sync operation: ${operation}`);
+    }
+
+    const selectedEventTypes = (this.getNodeParameter('eventTypes', itemIndex, []) as string[]) || [];
+    const initialLookback = this.getNodeParameter('initialLookback', itemIndex, 5) as number;
+    const lastEventId = this.getNodeParameter('lastEventId', itemIndex, '') as string;
+    const syncLimit = this.getNodeParameter('syncLimit', itemIndex, 100) as number;
+
+    const query: IDataObject = {
+      limit: syncLimit,
+    };
+
+    if (lastEventId) {
+      query.lastEventId = lastEventId;
+    } else if (initialLookback && initialLookback > 0) {
+      const sinceDate = new Date(Date.now() - initialLookback * 60 * 1000);
+      query.since = sinceDate.toISOString();
+    }
+
+    const events = (await kanbanApiRequest.call(this, 'GET', '/api/sync/events', {}, query)) as IDataObject[];
+
+    if (!Array.isArray(events)) {
+      throw new Error('Unexpected response from Kanban sync endpoint. Expected an array of events.');
+    }
+
+    if (selectedEventTypes.length === 0) {
+      return events;
+    }
+
+    const filters = new Set(selectedEventTypes);
+    return events.filter((event) => {
+      const eventType = `${event.resource}.${event.action}`;
+      return filters.has(eventType);
+    });
   }
 }

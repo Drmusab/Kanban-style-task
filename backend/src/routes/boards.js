@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const { db } = require('../utils/database');
+const { emitEvent, toNumericBoolean } = require('../services/eventBus');
 
 // Get all boards
 router.get('/', (req, res) => {
@@ -85,16 +86,26 @@ router.post('/', [
   }
   
   const { name, description, template = 0, created_by } = req.body;
-  
+  const templateValue = toNumericBoolean(template);
+  const fallbackTemplate = Number.isNaN(Number(template)) ? 0 : Number(template || 0);
+  const storedTemplate = templateValue === undefined ? fallbackTemplate : templateValue;
+
   db.run(
     'INSERT INTO boards (name, description, template, created_by) VALUES (?, ?, ?, ?)',
-    [name, description, template, created_by],
+    [name, description, storedTemplate, created_by],
     function(err) {
       if (err) {
         return res.status(500).json({ error: err.message });
       }
-      
-      res.status(201).json({ id: this.lastID, message: 'Board created successfully' });
+
+      db.get('SELECT * FROM boards WHERE id = ?', [this.lastID], (fetchErr, board) => {
+        if (fetchErr) {
+          return res.status(500).json({ error: fetchErr.message });
+        }
+
+        emitEvent('board', 'created', { board });
+        res.status(201).json({ id: this.lastID, board, message: 'Board created successfully' });
+      });
     }
   );
 });
@@ -110,24 +121,31 @@ router.put('/:id', [
   
   const { id } = req.params;
   const { name, description, template } = req.body;
-  
+
   // Build update query dynamically
   const updates = [];
   const values = [];
-  
+  const updatedFields = {};
+
   if (name !== undefined) {
     updates.push('name = ?');
     values.push(name);
+    updatedFields.name = name;
   }
-  
+
   if (description !== undefined) {
     updates.push('description = ?');
     values.push(description);
+    updatedFields.description = description;
   }
-  
+
   if (template !== undefined) {
+    const normalizedTemplate = toNumericBoolean(template);
+    const fallbackTemplate = Number.isNaN(Number(template)) ? 0 : Number(template || 0);
+    const storedTemplate = normalizedTemplate === undefined ? fallbackTemplate : normalizedTemplate;
     updates.push('template = ?');
-    values.push(template);
+    values.push(storedTemplate);
+    updatedFields.template = storedTemplate;
   }
   
   if (updates.length === 0) {
@@ -144,12 +162,20 @@ router.put('/:id', [
       if (err) {
         return res.status(500).json({ error: err.message });
       }
-      
+
       if (this.changes === 0) {
         return res.status(404).json({ error: 'Board not found' });
       }
-      
-      res.json({ message: 'Board updated successfully' });
+
+      db.get('SELECT * FROM boards WHERE id = ?', [id], (fetchErr, board) => {
+        if (fetchErr) {
+          return res.status(500).json({ error: fetchErr.message });
+        }
+
+        emitEvent('board', 'updated', { id: Number(id), board, changes: updatedFields });
+
+        res.json({ message: 'Board updated successfully', board, changes: updatedFields });
+      });
     }
   );
 });
@@ -157,17 +183,24 @@ router.put('/:id', [
 // Delete a board
 router.delete('/:id', (req, res) => {
   const { id } = req.params;
-  
-  db.run('DELETE FROM boards WHERE id = ?', [id], function(err) {
-    if (err) {
-      return res.status(500).json({ error: err.message });
+
+  db.get('SELECT * FROM boards WHERE id = ?', [id], (fetchErr, board) => {
+    if (fetchErr) {
+      return res.status(500).json({ error: fetchErr.message });
     }
-    
-    if (this.changes === 0) {
+
+    if (!board) {
       return res.status(404).json({ error: 'Board not found' });
     }
-    
-    res.json({ message: 'Board deleted successfully' });
+
+    db.run('DELETE FROM boards WHERE id = ?', [id], function(err) {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+
+      emitEvent('board', 'deleted', { id: Number(id), board });
+      res.json({ message: 'Board deleted successfully', board });
+    });
   });
 });
 
