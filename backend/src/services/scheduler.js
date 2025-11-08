@@ -136,6 +136,10 @@ const shouldCreateRecurringTask = (lastDueDate, recurringRule, today) => {
 
 // Calculate the next due date for a recurring task
 const calculateNextDueDate = (lastDueDate, recurringRule) => {
+  if (!(lastDueDate instanceof Date) || Number.isNaN(lastDueDate.getTime())) {
+    return null;
+  }
+
   const { frequency, interval, endDate, maxOccurrences } = recurringRule;
   const nextDueDate = new Date(lastDueDate);
   

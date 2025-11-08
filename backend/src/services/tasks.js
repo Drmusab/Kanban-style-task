@@ -4,11 +4,20 @@ const { recordTaskHistory } = require('../utils/history');
 // Create a new instance of a recurring task
 const createRecurringTask = (originalTask, recurringRule) => {
   return new Promise((resolve, reject) => {
-    const { frequency, interval, endDate, maxOccurrences } = recurringRule;
-    
-    // Calculate the next due date
+    if (!originalTask || !originalTask.due_date) {
+      return reject(new Error('Cannot create recurring task without a valid due date'));
+    }
+
     const lastDueDate = new Date(originalTask.due_date);
-    let nextDueDate = new Date(lastDueDate);
+
+    if (Number.isNaN(lastDueDate.getTime())) {
+      return reject(new Error('Cannot create recurring task without a valid due date'));
+    }
+
+    const { frequency, interval, endDate, maxOccurrences } = recurringRule;
+
+    // Calculate the next due date
+    let nextDueDate = new Date(lastDueDate.getTime());
     
     switch (frequency) {
       case 'daily':
