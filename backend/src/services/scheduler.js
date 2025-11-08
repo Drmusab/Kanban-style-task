@@ -86,10 +86,10 @@ const startScheduler = () => {
             try {
               const recurringRule = JSON.parse(task.recurring_rule);
               const lastDueDate = new Date(task.due_date);
-              
+
               // Check if we need to create a new instance of this recurring task
               if (shouldCreateRecurringTask(lastDueDate, recurringRule, today)) {
-                createRecurringTask(task, recurringRule);
+                await createRecurringTask(task, recurringRule);
               }
             } catch (error) {
               console.error(`Error processing recurring task ${task.id}:`, error);
