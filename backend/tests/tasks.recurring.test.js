@@ -79,4 +79,22 @@ describe('createRecurringTask', () => {
 
     await runAsync('DELETE FROM boards WHERE id = ?', [boardId]);
   });
+
+  test('does not create more tasks than the maxOccurrences limit', async () => {
+    const dueDate = new Date();
+    const recurringRule = { frequency: 'daily', interval: 1, maxOccurrences: 2 };
+
+    const { task, boardId } = await createTestTask({
+      dueDate: dueDate.toISOString(),
+      recurringRule,
+    });
+
+    const firstTaskId = await createRecurringTask(task, recurringRule);
+    expect(firstTaskId).toBeDefined();
+
+    const secondTaskId = await createRecurringTask(task, recurringRule);
+    expect(secondTaskId).toBeNull();
+
+    await runAsync('DELETE FROM boards WHERE id = ?', [boardId]);
+  });
 });
