@@ -1,5 +1,13 @@
 import type { IDataObject, IExecuteFunctions, ILoadOptionsFunctions, ITriggerFunctions } from 'n8n-core';
-import type { OptionsWithUri } from 'request';
+
+interface RequestOptions {
+  method: string;
+  uri: string;
+  json: boolean;
+  qs?: IDataObject;
+  body?: IDataObject;
+  headers?: Record<string, string>;
+}
 
 interface KanbanCredentials {
   baseUrl: string;
@@ -19,7 +27,7 @@ export async function kanbanApiRequest(
     throw new Error('Kanban App base URL is missing from the credentials.');
   }
 
-  const options: OptionsWithUri = {
+  const options: RequestOptions = {
     method,
     uri: `${credentials.baseUrl.replace(/\/$/, '')}${endpoint}`,
     json: true,
