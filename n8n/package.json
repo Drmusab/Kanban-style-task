@@ -1,0 +1,42 @@
+{
+  "name": "n8n-nodes-kanban-app",
+  "version": "1.0.0",
+  "description": "Kanban App custom nodes for n8n",
+  "keywords": [
+    "n8n",
+    "workflow",
+    "automation",
+    "kanban"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/example/kanban-app"
+  },
+  "author": "Kanban App Team",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rimraf dist && tsc"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.24",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "tslib": "^2.6.2"
+  },
+  "n8n": {
+    "credentials": [
+      "dist/credentials/KanbanAppApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/KanbanApp/KanbanApp.node.js",
+      "dist/nodes/KanbanApp/KanbanAppTrigger.node.js"
+    ]
+  }
+}

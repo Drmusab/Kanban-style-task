@@ -12,8 +12,15 @@ This directory contains a reusable n8n custom node that connects to the Kanban T
 
 ## Installation
 
-1. Copy the `n8n` directory into your n8n custom nodes folder (usually `~/.n8n/custom/`).
-2. Restart n8n so it can discover the new node.
+1. Install dependencies and compile the TypeScript sources:
+   ```bash
+   cd n8n
+   npm install
+   npm run build
+   ```
+   This produces the JavaScript implementation inside the `dist/` directory that n8n loads at runtime.
+2. Copy the `n8n` directory (including the generated `dist/` folder) into your n8n custom nodes folder (usually `~/.n8n/custom/`).
+3. Restart n8n so it can discover the new node.
 
 ## Configuration
 
