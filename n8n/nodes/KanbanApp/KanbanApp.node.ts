@@ -4,6 +4,229 @@ import { NodeConnectionType } from 'n8n-workflow';
 
 import { kanbanApiRequest } from './GenericFunctions';
 
+function buildTaskPayload(
+  data: IDataObject,
+  options: { includeEmptyStrings?: boolean } = {},
+): IDataObject {
+  const { includeEmptyStrings = true } = options;
+  const payload: IDataObject = {};
+
+  for (const [rawKey, value] of Object.entries(data)) {
+    if (value === undefined) {
+      continue;
+    }
+
+    if (!includeEmptyStrings && value === '') {
+      continue;
+    }
+
+    let key = rawKey;
+
+    if (rawKey === 'columnId') {
+      key = 'column_id';
+    }
+
+    if (key === 'tags') {
+      if (Array.isArray(value)) {
+        payload[key] = value.filter((tag) => tag !== undefined && tag !== null);
+      } else if (typeof value === 'string') {
+        payload[key] = value
+          .split(',')
+          .map((tagId) => tagId.trim())
+          .filter((tagId) => tagId !== '')
+          .map((tagId) => (Number.isNaN(Number(tagId)) ? tagId : Number(tagId)));
+      }
+      continue;
+    }
+
+    if (key === 'pinned' && typeof value === 'boolean') {
+      payload[key] = value ? 1 : 0;
+      continue;
+    }
+
+    payload[key] = value;
+  }
+
+  return payload;
+}
+
+function buildBoardPayload(data: IDataObject): IDataObject {
+  const payload: IDataObject = {};
+
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined) {
+      continue;
+    }
+
+    if (key === 'template' && typeof value === 'boolean') {
+      payload[key] = value ? 1 : 0;
+      continue;
+    }
+
+    payload[key] = value;
+  }
+
+  return payload;
+}
+
+async function handleTaskOperation(
+  this: IExecuteFunctions,
+  itemIndex: number,
+  operation: string,
+): Promise<IDataObject | IDataObject[]> {
+  if (operation === 'create') {
+    const title = this.getNodeParameter('title', itemIndex) as string;
+    const columnId = this.getNodeParameter('columnId', itemIndex) as number;
+    const additionalFields = this.getNodeParameter('additionalFields', itemIndex, {}) as IDataObject;
+
+    const body: IDataObject = buildTaskPayload({
+      title,
+      column_id: columnId,
+      ...additionalFields,
+    });
+
+    return kanbanApiRequest.call(this, 'POST', '/api/tasks', body);
+  }
+
+  if (operation === 'get') {
+    const taskId = this.getNodeParameter('taskId', itemIndex) as number;
+    return kanbanApiRequest.call(this, 'GET', `/api/tasks/${taskId}`);
+  }
+
+  if (operation === 'getAll') {
+    const returnAll = this.getNodeParameter('returnAll', itemIndex) as boolean;
+    const response = (await kanbanApiRequest.call(this, 'GET', '/api/tasks')) as IDataObject[];
+
+    if (returnAll) {
+      return response;
+    }
+
+    const limit = this.getNodeParameter('limit', itemIndex) as number;
+    return response.slice(0, limit);
+  }
+
+  if (operation === 'update') {
+    const taskId = this.getNodeParameter('taskId', itemIndex) as number;
+    const additionalFields = this.getNodeParameter('additionalFields', itemIndex, {}) as IDataObject;
+
+    if (Object.keys(additionalFields).length === 0) {
+      throw new Error('At least one field must be provided to update a task.');
+    }
+
+    const body: IDataObject = buildTaskPayload(additionalFields);
+
+    return kanbanApiRequest.call(this, 'PUT', `/api/tasks/${taskId}`, body);
+  }
+
+  if (operation === 'delete') {
+    const taskId = this.getNodeParameter('taskId', itemIndex) as number;
+    const additionalFields = this.getNodeParameter('additionalFields', itemIndex, {}) as IDataObject;
+    const body: IDataObject = buildTaskPayload(additionalFields, { includeEmptyStrings: false });
+
+    await kanbanApiRequest.call(this, 'DELETE', `/api/tasks/${taskId}`, body);
+    return { success: true };
+  }
+
+  throw new Error(`Unsupported task operation: ${operation}`);
+}
+
+async function handleBoardOperation(
+  this: IExecuteFunctions,
+  itemIndex: number,
+  operation: string,
+): Promise<IDataObject | IDataObject[]> {
+  if (operation === 'create') {
+    const name = this.getNodeParameter('boardName', itemIndex) as string;
+    const additionalFields = this.getNodeParameter('boardAdditionalFields', itemIndex, {}) as IDataObject;
+    const body: IDataObject = buildBoardPayload({
+      name,
+      ...additionalFields,
+    });
+
+    return kanbanApiRequest.call(this, 'POST', '/api/boards', body);
+  }
+
+  if (operation === 'get') {
+    const boardId = this.getNodeParameter('boardId', itemIndex) as number;
+    return kanbanApiRequest.call(this, 'GET', `/api/boards/${boardId}`);
+  }
+
+  if (operation === 'getAll') {
+    const returnAll = this.getNodeParameter('returnAll', itemIndex) as boolean;
+    const response = (await kanbanApiRequest.call(this, 'GET', '/api/boards')) as IDataObject[];
+
+    if (returnAll) {
+      return response;
+    }
+
+    const limit = this.getNodeParameter('limit', itemIndex) as number;
+    return response.slice(0, limit);
+  }
+
+  if (operation === 'update') {
+    const boardId = this.getNodeParameter('boardId', itemIndex) as number;
+    const additionalFields = this.getNodeParameter('boardAdditionalFields', itemIndex, {}) as IDataObject;
+
+    if (Object.keys(additionalFields).length === 0) {
+      throw new Error('At least one field must be provided to update a board.');
+    }
+
+    const body = buildBoardPayload(additionalFields);
+
+    return kanbanApiRequest.call(this, 'PUT', `/api/boards/${boardId}`, body);
+  }
+
+  if (operation === 'delete') {
+    const boardId = this.getNodeParameter('boardId', itemIndex) as number;
+    await kanbanApiRequest.call(this, 'DELETE', `/api/boards/${boardId}`);
+    return { success: true };
+  }
+
+  throw new Error(`Unsupported board operation: ${operation}`);
+}
+
+async function handleSyncOperation(
+  this: IExecuteFunctions,
+  itemIndex: number,
+  operation: string,
+): Promise<IDataObject[]> {
+  if (operation !== 'getUpdates') {
+    throw new Error(`Unsupported sync operation: ${operation}`);
+  }
+
+  const selectedEventTypes = (this.getNodeParameter('eventTypes', itemIndex, []) as string[]) || [];
+  const initialLookback = this.getNodeParameter('initialLookback', itemIndex, 5) as number;
+  const lastEventId = this.getNodeParameter('lastEventId', itemIndex, '') as string;
+  const syncLimit = this.getNodeParameter('syncLimit', itemIndex, 100) as number;
+
+  const query: IDataObject = {
+    limit: syncLimit,
+  };
+
+  if (lastEventId) {
+    query.lastEventId = lastEventId;
+  } else if (initialLookback && initialLookback > 0) {
+    const sinceDate = new Date(Date.now() - initialLookback * 60 * 1000);
+    query.since = sinceDate.toISOString();
+  }
+
+  const events = (await kanbanApiRequest.call(this, 'GET', '/api/sync/events', {}, query)) as IDataObject[];
+
+  if (!Array.isArray(events)) {
+    throw new Error('Unexpected response from Kanban sync endpoint. Expected an array of events.');
+  }
+
+  if (selectedEventTypes.length === 0) {
+    return events;
+  }
+
+  const filters = new Set(selectedEventTypes);
+  return events.filter((event) => {
+    const eventType = `${event.resource}.${event.action}`;
+    return filters.has(eventType);
+  });
+}
+
 export class KanbanApp implements INodeType {
   description: INodeTypeDescription = {
     displayName: 'Kanban App',
@@ -511,11 +734,11 @@ export class KanbanApp implements INodeType {
         let responseData: IDataObject | IDataObject[] = {};
 
         if (resource === 'task') {
-          responseData = await this.handleTaskOperation(itemIndex, operation);
+          responseData = await handleTaskOperation.call(this, itemIndex, operation);
         } else if (resource === 'board') {
-          responseData = await this.handleBoardOperation(itemIndex, operation);
+          responseData = await handleBoardOperation.call(this, itemIndex, operation);
         } else if (resource === 'sync') {
-          responseData = await this.handleSyncOperation(itemIndex, operation);
+          responseData = await handleSyncOperation.call(this, itemIndex, operation);
         } else {
           throw new Error(`Unsupported resource: ${resource}`);
         }
@@ -532,216 +755,5 @@ export class KanbanApp implements INodeType {
     }
 
     return [returnData];
-  }
-
-  private async handleTaskOperation(itemIndex: number, operation: string): Promise<IDataObject | IDataObject[]> {
-    if (operation === 'create') {
-      const title = this.getNodeParameter('title', itemIndex) as string;
-      const columnId = this.getNodeParameter('columnId', itemIndex) as number;
-      const additionalFields = this.getNodeParameter('additionalFields', itemIndex, {}) as IDataObject;
-
-      const body: IDataObject = this.buildTaskPayload({
-        title,
-        column_id: columnId,
-        ...additionalFields,
-      });
-
-      return kanbanApiRequest.call(this, 'POST', '/api/tasks', body);
-    }
-
-    if (operation === 'get') {
-      const taskId = this.getNodeParameter('taskId', itemIndex) as number;
-      return kanbanApiRequest.call(this, 'GET', `/api/tasks/${taskId}`);
-    }
-
-    if (operation === 'getAll') {
-      const returnAll = this.getNodeParameter('returnAll', itemIndex) as boolean;
-      const response = (await kanbanApiRequest.call(this, 'GET', '/api/tasks')) as IDataObject[];
-
-      if (returnAll) {
-        return response;
-      }
-
-      const limit = this.getNodeParameter('limit', itemIndex) as number;
-      return response.slice(0, limit);
-    }
-
-    if (operation === 'update') {
-      const taskId = this.getNodeParameter('taskId', itemIndex) as number;
-      const additionalFields = this.getNodeParameter('additionalFields', itemIndex, {}) as IDataObject;
-
-      if (Object.keys(additionalFields).length === 0) {
-        throw new Error('At least one field must be provided to update a task.');
-      }
-
-      const body: IDataObject = this.buildTaskPayload(additionalFields);
-
-      return kanbanApiRequest.call(this, 'PUT', `/api/tasks/${taskId}`, body);
-    }
-
-    if (operation === 'delete') {
-      const taskId = this.getNodeParameter('taskId', itemIndex) as number;
-      const additionalFields = this.getNodeParameter('additionalFields', itemIndex, {}) as IDataObject;
-      const body: IDataObject = this.buildTaskPayload(additionalFields, { includeEmptyStrings: false });
-
-      await kanbanApiRequest.call(this, 'DELETE', `/api/tasks/${taskId}`, body);
-      return { success: true };
-    }
-
-    throw new Error(`Unsupported task operation: ${operation}`);
-  }
-
-  private buildTaskPayload(
-    data: IDataObject,
-    options: { includeEmptyStrings?: boolean } = {},
-  ): IDataObject {
-    const { includeEmptyStrings = true } = options;
-    const payload: IDataObject = {};
-
-    for (const [rawKey, value] of Object.entries(data)) {
-      if (value === undefined) {
-        continue;
-      }
-
-      if (!includeEmptyStrings && value === '') {
-        continue;
-      }
-
-      let key = rawKey;
-
-      if (rawKey === 'columnId') {
-        key = 'column_id';
-      }
-
-      if (key === 'tags') {
-        if (Array.isArray(value)) {
-          payload[key] = value.filter((tag) => tag !== undefined && tag !== null);
-        } else if (typeof value === 'string') {
-          payload[key] = value
-            .split(',')
-            .map((tagId) => tagId.trim())
-            .filter((tagId) => tagId !== '')
-            .map((tagId) => Number.isNaN(Number(tagId)) ? tagId : Number(tagId));
-        }
-        continue;
-      }
-
-      if (key === 'pinned' && typeof value === 'boolean') {
-        payload[key] = value ? 1 : 0;
-        continue;
-      }
-
-      payload[key] = value;
-    }
-
-    return payload;
-  }
-
-  private async handleBoardOperation(itemIndex: number, operation: string): Promise<IDataObject | IDataObject[]> {
-    if (operation === 'create') {
-      const name = this.getNodeParameter('boardName', itemIndex) as string;
-      const additionalFields = this.getNodeParameter('boardAdditionalFields', itemIndex, {}) as IDataObject;
-      const body: IDataObject = this.buildBoardPayload({
-        name,
-        ...additionalFields,
-      });
-
-      return kanbanApiRequest.call(this, 'POST', '/api/boards', body);
-    }
-
-    if (operation === 'get') {
-      const boardId = this.getNodeParameter('boardId', itemIndex) as number;
-      return kanbanApiRequest.call(this, 'GET', `/api/boards/${boardId}`);
-    }
-
-    if (operation === 'getAll') {
-      const returnAll = this.getNodeParameter('returnAll', itemIndex) as boolean;
-      const response = (await kanbanApiRequest.call(this, 'GET', '/api/boards')) as IDataObject[];
-
-      if (returnAll) {
-        return response;
-      }
-
-      const limit = this.getNodeParameter('limit', itemIndex) as number;
-      return response.slice(0, limit);
-    }
-
-    if (operation === 'update') {
-      const boardId = this.getNodeParameter('boardId', itemIndex) as number;
-      const additionalFields = this.getNodeParameter('boardAdditionalFields', itemIndex, {}) as IDataObject;
-
-      if (Object.keys(additionalFields).length === 0) {
-        throw new Error('At least one field must be provided to update a board.');
-      }
-
-      const body = this.buildBoardPayload(additionalFields);
-
-      return kanbanApiRequest.call(this, 'PUT', `/api/boards/${boardId}`, body);
-    }
-
-    if (operation === 'delete') {
-      const boardId = this.getNodeParameter('boardId', itemIndex) as number;
-      await kanbanApiRequest.call(this, 'DELETE', `/api/boards/${boardId}`);
-      return { success: true };
-    }
-
-    throw new Error(`Unsupported board operation: ${operation}`);
-  }
-
-  private buildBoardPayload(data: IDataObject): IDataObject {
-    const payload: IDataObject = {};
-
-    for (const [key, value] of Object.entries(data)) {
-      if (value === undefined) {
-        continue;
-      }
-
-      if (key === 'template' && typeof value === 'boolean') {
-        payload[key] = value ? 1 : 0;
-        continue;
-      }
-
-      payload[key] = value;
-    }
-
-    return payload;
-  }
-
-  private async handleSyncOperation(itemIndex: number, operation: string): Promise<IDataObject[]> {
-    if (operation !== 'getUpdates') {
-      throw new Error(`Unsupported sync operation: ${operation}`);
-    }
-
-    const selectedEventTypes = (this.getNodeParameter('eventTypes', itemIndex, []) as string[]) || [];
-    const initialLookback = this.getNodeParameter('initialLookback', itemIndex, 5) as number;
-    const lastEventId = this.getNodeParameter('lastEventId', itemIndex, '') as string;
-    const syncLimit = this.getNodeParameter('syncLimit', itemIndex, 100) as number;
-
-    const query: IDataObject = {
-      limit: syncLimit,
-    };
-
-    if (lastEventId) {
-      query.lastEventId = lastEventId;
-    } else if (initialLookback && initialLookback > 0) {
-      const sinceDate = new Date(Date.now() - initialLookback * 60 * 1000);
-      query.since = sinceDate.toISOString();
-    }
-
-    const events = (await kanbanApiRequest.call(this, 'GET', '/api/sync/events', {}, query)) as IDataObject[];
-
-    if (!Array.isArray(events)) {
-      throw new Error('Unexpected response from Kanban sync endpoint. Expected an array of events.');
-    }
-
-    if (selectedEventTypes.length === 0) {
-      return events;
-    }
-
-    const filters = new Set(selectedEventTypes);
-    return events.filter((event) => {
-      const eventType = `${event.resource}.${event.action}`;
-      return filters.has(eventType);
-    });
   }
 }

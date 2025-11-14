@@ -22,6 +22,16 @@ This directory contains a reusable n8n custom node that connects to the Kanban T
 2. Copy the `n8n` directory (including the generated `dist/` folder) into your n8n custom nodes folder (usually `~/.n8n/custom/`).
 3. Restart n8n so it can discover the new node.
 
+## Running inside Docker
+
+The repository includes a Docker image that bakes the Kanban App node into an n8n instance. Build and start the stack with docker compose:
+
+```bash
+docker compose up --build
+```
+
+The compose file exposes the n8n editor on [http://localhost:5678](http://localhost:5678). The custom node is automatically copied into `/home/node/.n8n/custom/` inside the container and is available without additional manual steps.
+
 ## Configuration
 
 1. In n8n, add new credentials of type **Kanban App API**.

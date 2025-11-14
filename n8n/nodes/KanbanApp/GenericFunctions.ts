@@ -1,4 +1,5 @@
-import type { IDataObject, IExecuteFunctions, ILoadOptionsFunctions, ITriggerFunctions } from 'n8n-core';
+import type { IExecuteFunctions, ILoadOptionsFunctions, ITriggerFunctions } from 'n8n-core';
+import type { IDataObject } from 'n8n-workflow';
 
 interface RequestOptions {
   method: string;
