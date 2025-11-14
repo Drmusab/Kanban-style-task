@@ -12,6 +12,8 @@ declare module 'n8n-workflow' {
 
   export interface INodeType {
     description: INodeTypeDescription;
+    execute?(this: import('n8n-core').IExecuteFunctions): Promise<INodeExecutionData[][]>;
+    trigger?(this: import('n8n-core').ITriggerFunctions): Promise<INodeTypeTriggerResponse>;
   }
 
   export interface INodeProperties {
@@ -20,6 +22,13 @@ declare module 'n8n-workflow' {
 
   export interface INodeTypeTriggerResponse {
     closeFunction: () => Promise<void> | void;
+  }
+
+  export interface ICredentialType {
+    name: string;
+    displayName: string;
+    properties: INodeProperties[];
+    documentationUrl?: string;
   }
 
   export enum NodeConnectionType {
@@ -32,12 +41,14 @@ declare module 'n8n-core' {
 
   export interface Helpers {
     request(options: any): Promise<any>;
+    returnJsonArray(data: IDataObject[]): INodeExecutionData[];
   }
 
   export interface IExecuteFunctions {
     getInputData(): INodeExecutionData[];
     getNodeParameter(name: string, itemIndex: number, defaultValue?: any): any;
     getCredentials(name: string): Promise<any>;
+    continueOnFail(): boolean;
     helpers: Helpers;
   }
 
