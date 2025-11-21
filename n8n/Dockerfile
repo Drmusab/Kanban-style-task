@@ -10,9 +10,9 @@ COPY nodes ./nodes
 COPY types ./types
 
 # Install dependencies, build the TypeScript sources and prune dev dependencies
-RUN npm ci \
-    && npm run build \
-    && npm prune --omit=dev
+RUN npm ci && \
+    npm run build && \
+    npm prune --omit=dev
 
 # Final image based on the official n8n image
 FROM n8nio/n8n:1.63.1
