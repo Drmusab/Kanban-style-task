@@ -16,7 +16,6 @@ import {
   MoreVert,
   PushPin,
   CalendarToday,
-  Person,
   SubdirectoryArrowRight
 } from '@mui/icons-material';
 import { format } from 'date-fns';

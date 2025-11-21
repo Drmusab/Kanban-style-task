@@ -26,7 +26,8 @@ import {
   LineChart,
   Line
 } from 'recharts';
-import { getTasks, getBoards } from '../services/taskService';
+import { getTasks } from '../services/taskService';
+import { getBoards } from '../services/boardService';
 import { useNotification } from '../contexts/NotificationContext';
 
 const Analytics = () => {

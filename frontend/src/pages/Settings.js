@@ -29,7 +29,7 @@ import {
   Add,
   Delete,
   Edit,
-  Test
+  PlayArrow
 } from '@mui/icons-material';
 import { getIntegrations, createIntegration, updateIntegration, deleteIntegration, testN8nWebhook } from '../services/integrationService';
 import { getAutomationRules, createAutomationRule, updateAutomationRule, deleteAutomationRule } from '../services/automationService';
@@ -263,7 +263,7 @@ const Settings = () => {
               <Box>
                 <Button
                   variant="outlined"
-                  startIcon={<Test />}
+                  startIcon={<PlayArrow />}
                   onClick={() => setTestWebhookDialogOpen(true)}
                   sx={{ mr: 1 }}
                 >

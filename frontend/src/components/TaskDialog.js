@@ -23,9 +23,6 @@ import {
 import {
   Add,
   Delete,
-  CalendarToday,
-  Flag,
-  Person,
   Close
 } from '@mui/icons-material';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
