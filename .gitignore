@@ -3,3 +3,5 @@ backend/node_modules/
 frontend/node_modules/
 backend/data/
 frontend/build/
+n8n/dist/
+n8n/node_modules/
