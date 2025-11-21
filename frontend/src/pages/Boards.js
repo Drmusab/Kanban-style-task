@@ -21,7 +21,6 @@ import {
 import {
   Add,
   MoreVert,
-  Edit,
   Delete,
   ContentCopy
 } from '@mui/icons-material';

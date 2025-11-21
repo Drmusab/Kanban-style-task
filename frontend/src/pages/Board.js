@@ -57,6 +57,7 @@ const Board = () => {
   const [swimlaneDialogOpen, setSwimlaneDialogOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [selectedColumn, setSelectedColumn] = useState(null);
+  const [selectedSwimlane, setSelectedSwimlane] = useState(null);
   const [columnMenuAnchor, setColumnMenuAnchor] = useState(null);
   const [swimlaneMenuAnchor, setSwimlaneMenuAnchor] = useState(null);
   const [selectedColumnForMenu, setSelectedColumnForMenu] = useState(null);
