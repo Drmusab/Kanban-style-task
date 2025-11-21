@@ -5,3 +5,5 @@ backend/data/
 frontend/build/
 n8n/dist/
 n8n/node_modules/
+*.backup
+*.bak
