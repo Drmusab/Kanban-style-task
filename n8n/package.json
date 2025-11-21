@@ -21,11 +21,11 @@
   ],
   "scripts": {
     "build": "rimraf dist && tsc && npm run copy-assets",
-    "copy-assets": "copyfiles -u 0 \"nodes/**/*.svg\" dist"
+    "copy-assets": "cpy '**/*.svg' ../dist/nodes --cwd=nodes"
   },
   "devDependencies": {
     "@types/node": "^20.11.24",
-    "copyfiles": "^2.4.1",
+    "cpy-cli": "^6.0.0",
     "rimraf": "^5.0.5",
     "typescript": "^5.4.5"
   },
