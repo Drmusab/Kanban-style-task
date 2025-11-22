@@ -38,6 +38,10 @@ const Routines = () => {
   const activeRoutines = useMemo(() => routines.filter(r => (r.recurringRule?.status || 'active') === 'active'), [routines]);
   const pausedRoutines = useMemo(() => routines.filter(r => (r.recurringRule?.status || 'active') === 'paused'), [routines]);
 
+  const broadcastRoutinesChange = () => {
+    window.dispatchEvent(new Event('routines:changed'));
+  };
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -62,6 +66,7 @@ const Routines = () => {
     try {
       const response = await getRoutines();
       setRoutines(response.data);
+      broadcastRoutinesChange();
     } catch (error) {
       showError('Unable to refresh routines');
     }

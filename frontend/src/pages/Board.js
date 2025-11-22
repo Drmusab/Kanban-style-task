@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   Box,
@@ -110,15 +110,23 @@ const Board = () => {
     return Array.from(userMap.values());
   }, [tasks]);
 
+  const broadcastTasksChange = useCallback(() => {
+    window.dispatchEvent(new Event('tasks:changed'));
+  }, []);
+
+  const refreshTasks = useCallback(async () => {
+    const tasksResponse = await getTasks({ boardId: id });
+    setTasks(tasksResponse.data);
+  }, [id]);
+
   useEffect(() => {
     const fetchBoardData = async () => {
       try {
         const boardResponse = await getBoard(id);
         setBoard(boardResponse.data);
-        
-        const tasksResponse = await getTasks({ boardId: id });
-        setTasks(tasksResponse.data);
-        
+
+        await refreshTasks();
+
         setLoading(false);
       } catch (error) {
         showError('Failed to load board data');
@@ -127,7 +135,18 @@ const Board = () => {
     };
 
     fetchBoardData();
-  }, [id, showError]);
+  }, [id, showError, refreshTasks]);
+
+  useEffect(() => {
+    const handleExternalTaskChange = () => {
+      refreshTasks();
+    };
+
+    window.addEventListener('tasks:changed', handleExternalTaskChange);
+    return () => {
+      window.removeEventListener('tasks:changed', handleExternalTaskChange);
+    };
+  }, [refreshTasks]);
 
   const handleDragEnd = async (result) => {
     const { destination, source, draggableId, type } = result;
@@ -246,11 +265,10 @@ const Board = () => {
         await createTask(task);
         showSuccess('Task created successfully');
       }
-      
-      // Refresh tasks
-      const tasksResponse = await getTasks({ boardId: id });
-      setTasks(tasksResponse.data);
-      
+
+      await refreshTasks();
+      broadcastTasksChange();
+
       setTaskDialogOpen(false);
       setSelectedTask(null);
     } catch (error) {

@@ -11,6 +11,7 @@ import Settings from './pages/Settings';
 import Analytics from './pages/Analytics';
 import Login from './pages/Login';
 import Routines from './pages/Routines';
+import Calendar from './pages/Calendar';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 
@@ -39,6 +40,7 @@ function AppRoutes() {
         <Route path="/routines" element={isAuthenticated ? <Routines /> : <Navigate to="/login" />} />
         <Route path="/settings" element={isAuthenticated ? <Settings /> : <Navigate to="/login" />} />
         <Route path="/analytics" element={isAuthenticated ? <Analytics /> : <Navigate to="/login" />} />
+        <Route path="/calendar" element={isAuthenticated ? <Calendar /> : <Navigate to="/login" />} />
         <Route path="/" element={isAuthenticated ? <Navigate to="/boards" /> : <Navigate to="/login" />} />
       </Routes>
     </Router>
