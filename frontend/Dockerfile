@@ -21,16 +21,8 @@ FROM nginx:alpine
 # Copy built files from builder stage
 COPY --from=builder /app/build /usr/share/nginx/html
 
-# Copy nginx configuration if needed
-# Add a simple nginx config to handle React Router
-RUN echo 'server { \
-    listen 3000; \
-    location / { \
-        root /usr/share/nginx/html; \
-        index index.html; \
-        try_files $uri $uri/ /index.html; \
-    } \
-}' > /etc/nginx/conf.d/default.conf
+# Copy nginx configuration to handle React Router
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Expose port 3000 to match docker-compose
 EXPOSE 3000
