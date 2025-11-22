@@ -69,38 +69,46 @@ const parseCreateCommand = (command) => {
   // "Create task "Write release notes" in Done"
   // "Add task "Fix bug" to In Progress with high priority"
   // "Create high priority task "Deploy" in Done"
-  const patterns = [
-    /create (?:a )?(?:(low|medium|high|critical) priority )?task(?: called| named)?\s+"?([^\"]+?)"?(?: in| to)?\s+(?:column )?"?([^\"]+?)"?(?:\s+with (low|medium|high|critical) priority)?/i,
-    /add (?:a )?(?:(low|medium|high|critical) priority )?task(?: called| named)?\s+"?([^\"]+?)"?(?: in| to)?\s+(?:column )?"?([^\"]+?)"?(?:\s+with (low|medium|high|critical) priority)?/i
-  ];
-
-  for (const pattern of patterns) {
-    const match = command.match(pattern);
-    if (match) {
-      return {
-        action: 'create',
-        title: normalize(match[2] || match[3]),
-        columnName: normalize(match[3] || match[4]),
-        priority: match[1] || match[4] || 'medium'
-      };
-    }
-  }
-
-  // Simple pattern without priority
-  const simpleMatch = command.match(/create (?:a )?task(?: called| named)?\s+"?([^\"]+?)"?(?: in| to)?\s+(?:column )?"?([^\"]+?)"?/i);
-  if (simpleMatch) {
+  
+  // Pattern for quoted task names
+  let match = command.match(/create (?:a )?(?:(low|medium|high|critical) priority )?task(?: called| named)?\s+"([^"]+)"(?: in| to)\s+(?:column )?(.+?)(?:\s+with (low|medium|high|critical) priority)?$/i);
+  if (match) {
     return {
       action: 'create',
-      title: normalize(simpleMatch[1]),
-      columnName: normalize(simpleMatch[2]),
-      priority: 'medium'
+      title: normalize(match[2]),
+      columnName: normalize(match[3]),
+      priority: match[1] || match[4] || 'medium'
     };
   }
+  
+  // Pattern for add command with quotes
+  match = command.match(/add (?:a )?(?:(low|medium|high|critical) priority )?task(?: called| named)?\s+"([^"]+)"(?: in| to)\s+(?:column )?(.+?)(?:\s+with (low|medium|high|critical) priority)?$/i);
+  if (match) {
+    return {
+      action: 'create',
+      title: normalize(match[2]),
+      columnName: normalize(match[3]),
+      priority: match[1] || match[4] || 'medium'
+    };
+  }
+  
+  // Simple pattern without quotes
+  match = command.match(/create (?:a )?(?:(low|medium|high|critical) priority )?task(?: called| named)?\s+(.+?)(?: in| to)\s+(?:column )?(.+)$/i);
+  if (match) {
+    return {
+      action: 'create',
+      title: normalize(match[2]),
+      columnName: normalize(match[3]),
+      priority: match[1] || 'medium'
+    };
+  }
+  
   return null;
 };
 
 const parseMoveCommand = (command) => {
-  const match = command.match(/move task\s+"?([^\"]+?)"?\s+to\s+"?([^\"]+?)"?/i);
+  // Pattern for quoted task names
+  let match = command.match(/move task\s+"([^"]+)"\s+to\s+(.+)$/i);
   if (match) {
     return {
       action: 'move',
@@ -108,30 +116,65 @@ const parseMoveCommand = (command) => {
       columnName: normalize(match[2])
     };
   }
+  
+  // Pattern without quotes
+  match = command.match(/move task\s+(.+?)\s+to\s+(.+)$/i);
+  if (match) {
+    return {
+      action: 'move',
+      title: normalize(match[1]),
+      columnName: normalize(match[2])
+    };
+  }
+  
   return null;
 };
 
 const parseCompleteCommand = (command) => {
-  const match = command.match(/(?:complete|mark|finish) task\s+"?([^\"]+?)"?/i);
+  // Pattern for quoted task names
+  let match = command.match(/(?:complete|mark|finish) task\s+"([^"]+)"$/i);
   if (match) {
     return { action: 'complete', title: normalize(match[1]) };
   }
+  
+  // Pattern without quotes
+  match = command.match(/(?:complete|mark|finish) task\s+(.+)$/i);
+  if (match) {
+    return { action: 'complete', title: normalize(match[1]) };
+  }
+  
   return null;
 };
 
 const parseDueDateCommand = (command) => {
-  const match = command.match(/set due date for task\s+"?([^\"]+?)"?\s+to\s+([^"\n]+)/i);
+  // Pattern for quoted task names
+  let match = command.match(/set due date for task\s+"([^"]+)"\s+to\s+(.+)$/i);
   if (match) {
     return { action: 'set_due', title: normalize(match[1]), dueDate: normalize(match[2]) };
   }
+  
+  // Pattern without quotes
+  match = command.match(/set due date for task\s+(.+?)\s+to\s+(.+)$/i);
+  if (match) {
+    return { action: 'set_due', title: normalize(match[1]), dueDate: normalize(match[2]) };
+  }
+  
   return null;
 };
 
 const parsePriorityCommand = (command) => {
-  const match = command.match(/set (?:task\s+)?"?([^\"]+?)"?\s+(?:priority )?to\s+(low|medium|high|critical)/i);
+  // Pattern for quoted task names
+  let match = command.match(/set (?:task\s+)?"([^"]+)"\s+(?:priority )?to\s+(low|medium|high|critical)$/i);
   if (match) {
     return { action: 'set_priority', title: normalize(match[1]), priority: match[2].toLowerCase() };
   }
+  
+  // Pattern without quotes
+  match = command.match(/set (?:task\s+)?(.+?)\s+(?:priority )?to\s+(low|medium|high|critical)$/i);
+  if (match) {
+    return { action: 'set_priority', title: normalize(match[1]), priority: match[2].toLowerCase() };
+  }
+  
   return null;
 };
 
@@ -139,20 +182,22 @@ const parseListCommand = (command) => {
   // "List tasks in To Do"
   // "Show all tasks"
   // "Get tasks in In Progress"
-  if (/list (?:all )?tasks(?:\s+in\s+"?([^\"]+?)"?)?/i.test(command)) {
-    const match = command.match(/list (?:all )?tasks(?:\s+in\s+"?([^\"]+?)"?)?/i);
+  let match = command.match(/list (?:all )?tasks(?: in\s+(.+))?$/i);
+  if (match) {
     return {
       action: 'list',
       columnName: match[1] ? normalize(match[1]) : null
     };
   }
-  if (/(?:show|get) (?:all )?tasks(?:\s+in\s+"?([^\"]+?)"?)?/i.test(command)) {
-    const match = command.match(/(?:show|get) (?:all )?tasks(?:\s+in\s+"?([^\"]+?)"?)?/i);
+  
+  match = command.match(/(?:show|get) (?:all )?tasks(?: in\s+(.+))?$/i);
+  if (match) {
     return {
       action: 'list',
       columnName: match[1] ? normalize(match[1]) : null
     };
   }
+  
   return null;
 };
 
