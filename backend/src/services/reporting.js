@@ -1,6 +1,12 @@
 const { allAsync, getAsync } = require('../utils/database');
 const { triggerWebhook } = require('./webhook');
 
+// Helper function to calculate completion rate
+const calculateCompletionRate = (completed, total) => {
+  if (total === 0) return '0%';
+  return ((completed / total) * 100).toFixed(2) + '%';
+};
+
 // Generate a weekly report
 const generateWeeklyReport = async () => {
   const since = new Date();
@@ -92,9 +98,10 @@ const generateWeeklyReport = async () => {
         tasksCreated: createdTasks?.[0]?.count || 0,
         tasksCompleted: completedTasks?.[0]?.count || 0,
         tasksOverdue: overdueTasks?.[0]?.count || 0,
-        completionRate: createdTasks?.[0]?.count > 0 
-          ? ((completedTasks?.[0]?.count || 0) / createdTasks?.[0]?.count * 100).toFixed(2) + '%'
-          : '0%',
+        completionRate: calculateCompletionRate(
+          completedTasks?.[0]?.count || 0,
+          createdTasks?.[0]?.count || 0
+        ),
         avgCompletionTimeHours: avgCompletionTime.toFixed(2)
       },
       tasksByColumn: tasksByColumn || [],
@@ -147,9 +154,10 @@ const generateCustomReport = async (startDate, endDate) => {
       summary: {
         tasksCreated: createdTasks?.[0]?.count || 0,
         tasksCompleted: completedTasks?.[0]?.count || 0,
-        completionRate: createdTasks?.[0]?.count > 0 
-          ? ((completedTasks?.[0]?.count || 0) / createdTasks?.[0]?.count * 100).toFixed(2) + '%'
-          : '0%'
+        completionRate: calculateCompletionRate(
+          completedTasks?.[0]?.count || 0,
+          createdTasks?.[0]?.count || 0
+        )
       },
       tasksByColumn: tasksByColumn || []
     };

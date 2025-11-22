@@ -5,6 +5,10 @@ const { sendTaskDueNotification, sendRoutineReminder } = require('./notification
 const { createRecurringTask } = require('./tasks');
 const { generateWeeklyReport, sendReportToN8n } = require('./reporting');
 
+// Time constants
+const MILLISECONDS_PER_MINUTE = 60 * 1000;
+const MILLISECONDS_PER_HOUR = 60 * MILLISECONDS_PER_MINUTE;
+
 // Start the scheduler
 const startScheduler = () => {
   console.log('Starting task scheduler...');
@@ -27,10 +31,10 @@ const startScheduler = () => {
           for (const task of tasks) {
             const dueDate = new Date(task.due_date);
             const nowDate = new Date();
-            const minutesUntilDue = Math.floor((dueDate - nowDate) / (60 * 1000));
+            const minutesUntilDue = Math.floor((dueDate - nowDate) / MILLISECONDS_PER_MINUTE);
             
             // Check if task is overdue (more than 1 hour past due date)
-            if (nowDate - dueDate > 60 * 60 * 1000) {
+            if (nowDate - dueDate > MILLISECONDS_PER_HOUR) {
               // Trigger automation for overdue task
               triggerAutomation('task_overdue', { taskId: task.id, columnId: task.column_id });
               
@@ -46,7 +50,7 @@ const startScheduler = () => {
               sendTaskDueNotification(task, 0);
             }
             // Check if task is due soon (within 1 hour of due date)
-            else if (dueDate - nowDate <= 60 * 60 * 1000) {
+            else if (dueDate - nowDate <= MILLISECONDS_PER_HOUR) {
               // Trigger automation for task due soon
               triggerAutomation('task_due_soon', { taskId: task.id, columnId: task.column_id });
               

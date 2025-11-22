@@ -288,13 +288,14 @@ router.post('/command', [body('command').notEmpty().withMessage('Command text is
         columnId: column.id, 
         priority: parsed.priority 
       });
+      const priorityLabel = parsed.priority.charAt(0).toUpperCase() + parsed.priority.slice(1);
       return res.json({
         action: 'create',
         success: true,
         taskId,
         columnId: column.id,
         priority: parsed.priority,
-        message: `Created ${parsed.priority} priority task "${parsed.title}" in ${column.name}`
+        message: `Created ${priorityLabel} priority task "${parsed.title}" in ${column.name}`
       });
     }
 
