@@ -129,7 +129,7 @@ const Board = () => {
 
         setLoading(false);
       } catch (error) {
-        showError('Failed to load board data');
+        showError('فشل تحميل بيانات اللوحة');
         setLoading(false);
       }
     };
@@ -184,9 +184,9 @@ const Board = () => {
         );
 
         setBoard(prev => (prev ? { ...prev, columns: columnsWithUpdatedPositions } : prev));
-        showSuccess('Columns reordered successfully');
+        showSuccess('تم إعادة ترتيب الأعمدة بنجاح');
       } catch (error) {
-        showError('Failed to reorder columns');
+        showError('فشل إعادة ترتيب الأعمدة');
         try {
           const boardResponse = await getBoard(id);
           setBoard(boardResponse.data);
@@ -225,9 +225,9 @@ const Board = () => {
       });
 
       setTasks(updatedTasks);
-      showSuccess('Task moved successfully');
+      showSuccess('تم نقل المهمة بنجاح');
     } catch (error) {
-      showError('Failed to move task');
+      showError('فشل نقل المهمة');
       try {
         const tasksResponse = await getTasks({ boardId: id });
         setTasks(tasksResponse.data);
@@ -260,10 +260,10 @@ const Board = () => {
     try {
       if (task.id) {
         await updateTask(task.id, task);
-        showSuccess('Task updated successfully');
+        showSuccess('تم تحديث المهمة بنجاح');
       } else {
         await createTask(task);
-        showSuccess('Task created successfully');
+        showSuccess('تم إنشاء المهمة بنجاح');
       }
 
       await refreshTasks();
@@ -272,7 +272,7 @@ const Board = () => {
       setTaskDialogOpen(false);
       setSelectedTask(null);
     } catch (error) {
-      showError('Failed to save task');
+      showError('فشل حفظ المهمة');
     }
   };
 
@@ -295,10 +295,10 @@ const Board = () => {
     try {
       if (column.id) {
         await updateColumn(board.id, column.id, column);
-        showSuccess('Column updated successfully');
+        showSuccess('تم تحديث العمود بنجاح');
       } else {
         await createColumn(board.id, column);
-        showSuccess('Column created successfully');
+        showSuccess('تم إنشاء العمود بنجاح');
       }
       
       // Refresh board
@@ -308,7 +308,7 @@ const Board = () => {
       setColumnDialogOpen(false);
       setSelectedColumn(null);
     } catch (error) {
-      showError('Failed to save column');
+      showError('فشل حفظ العمود');
     }
   };
 
@@ -331,10 +331,10 @@ const Board = () => {
     try {
       if (swimlane.id) {
         await updateSwimlane(board.id, swimlane.id, swimlane);
-        showSuccess('Swimlane updated successfully');
+        showSuccess('تم تحديث المسار بنجاح');
       } else {
         await createSwimlane(board.id, swimlane);
-        showSuccess('Swimlane created successfully');
+        showSuccess('تم إنشاء المسار بنجاح');
       }
       
       // Refresh board
@@ -344,7 +344,7 @@ const Board = () => {
       setSwimlaneDialogOpen(false);
       setSelectedSwimlane(null);
     } catch (error) {
-      showError('Failed to save swimlane');
+      showError('فشل حفظ المسار');
     }
   };
 
@@ -386,9 +386,9 @@ const Board = () => {
     try {
       await deleteColumn(board.id, column.id);
       await refreshBoardAndTasks();
-      showSuccess('Column deleted successfully');
+      showSuccess('تم حذف العمود بنجاح');
     } catch (error) {
-      showError('Failed to delete column');
+      showError('فشل حذف العمود');
     } finally {
       handleColumnMenuClose();
     }
@@ -402,9 +402,9 @@ const Board = () => {
     try {
       await deleteSwimlane(board.id, swimlane.id);
       await refreshBoardAndTasks();
-      showSuccess('Swimlane deleted successfully');
+      showSuccess('تم حذف المسار بنجاح');
     } catch (error) {
-      showError('Failed to delete swimlane');
+      showError('فشل حذف المسار');
     } finally {
       handleSwimlaneMenuClose();
     }
@@ -417,18 +417,18 @@ const Board = () => {
       const boardResponse = await getBoard(id);
       setBoard(boardResponse.data);
 
-      showSuccess(`Swimlane ${swimlane.collapsed ? 'expanded' : 'collapsed'} successfully`);
+      showSuccess(`تم ${swimlane.collapsed ? 'توسيع' : 'طي'} المسار بنجاح`);
     } catch (error) {
-      showError('Failed to toggle swimlane');
+      showError('فشل تغيير حالة المسار');
     }
   };
 
   if (loading) {
-    return <Typography>Loading board...</Typography>;
+    return <Typography>جاري تحميل اللوحة...</Typography>;
   }
 
   if (!board) {
-    return <Typography>Board not found</Typography>;
+    return <Typography>لم يتم العثور على اللوحة</Typography>;
   }
 
   const tasksByColumnAndSwimlane = groupTasksByColumnAndSwimlane(board, tasks);
@@ -444,14 +444,14 @@ const Board = () => {
             onClick={handleAddSwimlane}
             sx={{ mr: 1 }}
           >
-            Add Swimlane
+            إضافة مسار
           </Button>
           <Button
             variant="contained"
             startIcon={<Add />}
             onClick={handleAddColumn}
           >
-            Add Column
+            إضافة عمود
           </Button>
         </Box>
       </Box>
@@ -516,7 +516,7 @@ const Board = () => {
                           onClick={() => handleAddTask(column.id)}
                           sx={{ mb: 1 }}
                         >
-                          Add Task
+                          إضافة مهمة
                         </Button>
                       </Box>
                       
@@ -695,14 +695,14 @@ const Board = () => {
             handleColumnMenuClose();
           }}
         >
-          <Edit sx={{ mr: 1 }} /> Edit
+          <Edit sx={{ mr: 1 }} /> تعديل
         </MenuItem>
         <Divider />
         <MenuItem
           disabled={!selectedColumnForMenu}
           onClick={() => handleDeleteColumn(selectedColumnForMenu)}
         >
-          <Delete sx={{ mr: 1 }} /> Delete
+          <Delete sx={{ mr: 1 }} /> حذف
         </MenuItem>
       </Menu>
       
@@ -721,14 +721,14 @@ const Board = () => {
             handleSwimlaneMenuClose();
           }}
         >
-          <Edit sx={{ mr: 1 }} /> Edit
+          <Edit sx={{ mr: 1 }} /> تعديل
         </MenuItem>
         <Divider />
         <MenuItem
           disabled={!selectedSwimlaneForMenu}
           onClick={() => handleDeleteSwimlane(selectedSwimlaneForMenu)}
         >
-          <Delete sx={{ mr: 1 }} /> Delete
+          <Delete sx={{ mr: 1 }} /> حذف
         </MenuItem>
       </Menu>
     </Box>

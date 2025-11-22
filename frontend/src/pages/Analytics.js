@@ -51,7 +51,7 @@ const Analytics = () => {
         setBoards(boardsResponse.data);
         setLoading(false);
       } catch (error) {
-        showError('Failed to load analytics data');
+        showError('فشل تحميل بيانات التحليلات');
         setLoading(false);
       }
     };
@@ -119,24 +119,24 @@ const Analytics = () => {
   const COLORS = ['#e74c3c', '#e67e22', '#f39c12', '#2ecc71'];
 
   if (loading) {
-    return <Typography>Loading analytics...</Typography>;
+    return <Typography>جاري تحميل بيانات التحليلات...</Typography>;
   }
 
   return (
     <Box sx={{ p: 2 }}>
       <Typography variant="h4" gutterBottom>
-        Analytics
+        التحليلات
       </Typography>
       
       <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
         <FormControl sx={{ minWidth: 200 }}>
-          <InputLabel>Board</InputLabel>
+          <InputLabel>اللوحة</InputLabel>
           <Select
             value={selectedBoard}
             onChange={(e) => setSelectedBoard(e.target.value)}
-            label="Board"
+            label="اللوحة"
           >
-            <MenuItem value="">All Boards</MenuItem>
+            <MenuItem value="">جميع اللوحات</MenuItem>
             {boards.map(board => (
               <MenuItem key={board.id} value={board.id}>
                 {board.name}
@@ -144,22 +144,22 @@ const Analytics = () => {
             ))}
           </Select>
         </FormControl>
-        
+
         <FormControl sx={{ minWidth: 150 }}>
-          <InputLabel>Time Range</InputLabel>
+          <InputLabel>النطاق الزمني</InputLabel>
           <Select
             value={timeRange}
             onChange={(e) => setTimeRange(e.target.value)}
-            label="Time Range"
+            label="النطاق الزمني"
           >
-            <MenuItem value="day">Today</MenuItem>
-            <MenuItem value="week">This Week</MenuItem>
-            <MenuItem value="month">This Month</MenuItem>
-            <MenuItem value="year">This Year</MenuItem>
+            <MenuItem value="day">اليوم</MenuItem>
+            <MenuItem value="week">هذا الأسبوع</MenuItem>
+            <MenuItem value="month">هذا الشهر</MenuItem>
+            <MenuItem value="year">هذه السنة</MenuItem>
           </Select>
         </FormControl>
-        
-        <Button variant="outlined">Export Report</Button>
+
+        <Button variant="outlined">تصدير التقرير</Button>
       </Box>
       
       <Grid container spacing={3}>
@@ -167,7 +167,7 @@ const Analytics = () => {
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Tasks by Column
+                المهام حسب العمود
               </Typography>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={tasksByColumn}>
@@ -176,9 +176,9 @@ const Analytics = () => {
                   <YAxis />
                   <Tooltip />
                   <Legend />
-                  <Bar dataKey="total" fill="#3498db" name="Total" />
-                  <Bar dataKey="completed" fill="#2ecc71" name="Completed" />
-                </BarChart>
+                  <Bar dataKey="total" fill="#3498db" name="الإجمالي" />
+                  <Bar dataKey="completed" fill="#2ecc71" name="المكتملة" />
+              </BarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
@@ -188,7 +188,7 @@ const Analytics = () => {
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Task Distribution by Priority
+                توزيع المهام حسب الأولوية
               </Typography>
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
@@ -217,7 +217,7 @@ const Analytics = () => {
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Task Activity Over Time
+                نشاط المهام عبر الزمن
               </Typography>
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={completionOverTime}>
@@ -226,8 +226,8 @@ const Analytics = () => {
                   <YAxis />
                   <Tooltip />
                   <Legend />
-                  <Line type="monotone" dataKey="completed" stroke="#2ecc71" name="Completed" />
-                  <Line type="monotone" dataKey="created" stroke="#3498db" name="Created" />
+                  <Line type="monotone" dataKey="completed" stroke="#2ecc71" name="المكتملة" />
+                  <Line type="monotone" dataKey="created" stroke="#3498db" name="المضافة" />
                 </LineChart>
               </ResponsiveContainer>
             </CardContent>
@@ -238,7 +238,7 @@ const Analytics = () => {
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Average Time in Columns (Days)
+                متوسط الوقت في الأعمدة (أيام)
               </Typography>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={avgTimeInColumns} layout="horizontal">
@@ -257,7 +257,7 @@ const Analytics = () => {
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Total Tasks
+                إجمالي المهام
               </Typography>
               <Typography variant="h4">
                 {filteredTasks.length}
@@ -270,7 +270,7 @@ const Analytics = () => {
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Completed Tasks
+                المهام المكتملة
               </Typography>
               <Typography variant="h4">
                 {filteredTasks.filter(task => task.column_name === 'Done').length}
@@ -283,7 +283,7 @@ const Analytics = () => {
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Overdue Tasks
+                المهام المتأخرة
               </Typography>
               <Typography variant="h4" color="error">
                 {overdueTasks.length}
@@ -296,7 +296,7 @@ const Analytics = () => {
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Completion Rate
+                نسبة الإكمال
               </Typography>
               <Typography variant="h4">
                 {filteredTasks.length > 0 
