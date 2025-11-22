@@ -105,10 +105,8 @@ const startScheduler = () => {
   // Generate and send weekly reports to n8n every Monday at 9:00 AM
   cron.schedule('0 9 * * 1', async () => {
     try {
-      console.log('Generating and sending weekly report to n8n...');
       const report = await generateWeeklyReport();
       await sendReportToN8n(report);
-      console.log('Weekly report sent to n8n successfully');
     } catch (error) {
       console.error('Error sending weekly report to n8n:', error);
     }
@@ -127,8 +125,6 @@ const startScheduler = () => {
         function(err) {
           if (err) {
             console.error('Error cleaning up automation logs:', err);
-          } else {
-            console.log(`Cleaned up ${this.changes} old automation log entries`);
           }
         }
       );
