@@ -1,176 +1,188 @@
-import type { ITriggerFunctions } from 'n8n-core';
-import type {
-  IDataObject,
-  INodeExecutionData,
-  INodeType,
-  INodeTypeDescription,
-  INodeTypeTriggerResponse,
+import {
+	INodeType,
+	INodeTypeDescription,
+	IPollFunctions,
+	INodeExecutionData,
+	NodeOperationError,
 } from 'n8n-workflow';
-import { NodeConnectionType } from 'n8n-workflow';
 
 import { kanbanApiRequest } from './GenericFunctions';
 
 export class KanbanAppTrigger implements INodeType {
-  description: INodeTypeDescription = {
-    displayName: 'Kanban App Trigger',
-    name: 'kanbanAppTrigger',
-    icon: 'file:kanbanApp.svg',
-    group: ['trigger'],
-    version: 1,
-    description: 'Subscribe to Kanban board and task updates in near real-time',
-    defaults: {
-      name: 'Kanban App Trigger',
-    },
-    inputs: [],
-    outputs: [NodeConnectionType.Main],
-    credentials: [
-      {
-        name: 'kanbanAppApi',
-        required: true,
-      },
-    ],
-    properties: [
-      {
-        displayName: 'Event Types',
-        name: 'eventTypes',
-        type: 'multiOptions',
-        default: [
-          'task.created',
-          'task.updated',
-          'task.deleted',
-          'board.created',
-          'board.updated',
-          'board.deleted',
-        ],
-        options: [
-          {
-            name: 'Task Created',
-            value: 'task.created',
-          },
-          {
-            name: 'Task Updated',
-            value: 'task.updated',
-          },
-          {
-            name: 'Task Deleted',
-            value: 'task.deleted',
-          },
-          {
-            name: 'Board Created',
-            value: 'board.created',
-          },
-          {
-            name: 'Board Updated',
-            value: 'board.updated',
-          },
-          {
-            name: 'Board Deleted',
-            value: 'board.deleted',
-          },
-        ],
-        description: 'Events that should trigger the workflow',
-      },
-      {
-        displayName: 'Polling Interval',
-        name: 'pollInterval',
-        type: 'number',
-        default: 15,
-        typeOptions: {
-          minValue: 5,
-          maxValue: 3600,
-        },
-        description: 'How often to poll the backend for new events (in seconds)',
-      },
-      {
-        displayName: 'Initial Lookback (minutes)',
-        name: 'initialLookback',
-        type: 'number',
-        default: 10,
-        typeOptions: {
-          minValue: 0,
-          maxValue: 1440,
-        },
-        description: 'Look back this many minutes on the initial poll when no state is stored',
-      },
-      {
-        displayName: 'Maximum Events',
-        name: 'syncLimit',
-        type: 'number',
-        default: 100,
-        typeOptions: {
-          minValue: 1,
-          maxValue: 500,
-        },
-        description: 'Maximum number of events to request per poll',
-      },
-    ],
-  };
+	description: INodeTypeDescription = {
+		displayName: 'Kanban App Trigger',
+		name: 'kanbanAppTrigger',
+		icon: 'file:kanban.svg',
+		group: ['trigger'],
+		version: 1,
+		description: 'Triggers on Kanban app events',
+		defaults: {
+			name: 'Kanban App Trigger',
+		},
+		inputs: [],
+		outputs: ['main'],
+		credentials: [
+			{
+				name: 'kanbanAppApi',
+				required: true,
+			},
+		],
+		polling: true,
+		properties: [
+			{
+				displayName: 'Event Types',
+				name: 'events',
+				type: 'multiOptions',
+				options: [
+					{
+						name: 'Task Created',
+						value: 'task.created',
+					},
+					{
+						name: 'Task Updated',
+						value: 'task.updated',
+					},
+					{
+						name: 'Task Deleted',
+						value: 'task.deleted',
+					},
+					{
+						name: 'Task Completed',
+						value: 'task.completed',
+					},
+					{
+						name: 'Board Created',
+						value: 'board.created',
+					},
+					{
+						name: 'Board Updated',
+						value: 'board.updated',
+					},
+					{
+						name: 'Board Deleted',
+						value: 'board.deleted',
+					},
+				],
+				default: ['task.created', 'task.updated'],
+				description: 'The events to listen for',
+			},
+			{
+				displayName: 'Polling Interval',
+				name: 'pollInterval',
+				type: 'number',
+				default: 30,
+				description: 'How often to check for new events (in seconds)',
+				typeOptions: {
+					minValue: 5,
+					maxValue: 3600,
+				},
+			},
+			{
+				displayName: 'Options',
+				name: 'options',
+				type: 'collection',
+				placeholder: 'Add Option',
+				default: {},
+				options: [
+					{
+						displayName: 'Board ID',
+						name: 'boardId',
+						type: 'number',
+						default: '',
+						description: 'Only trigger for events on this specific board',
+					},
+					{
+						displayName: 'Priority Filter',
+						name: 'priority',
+						type: 'options',
+						options: [
+							{
+								name: 'All',
+								value: '',
+							},
+							{
+								name: 'Low',
+								value: 'low',
+							},
+							{
+								name: 'Medium',
+								value: 'medium',
+							},
+							{
+								name: 'High',
+								value: 'high',
+							},
+							{
+								name: 'Critical',
+								value: 'critical',
+							},
+						],
+						default: '',
+						description: 'Only trigger for tasks with this priority',
+					},
+				],
+			},
+		],
+	};
 
-  async trigger(this: ITriggerFunctions): Promise<INodeTypeTriggerResponse> {
-    const eventTypes = (this.getNodeParameter('eventTypes', 0, []) as string[]) || [];
-    const pollInterval = this.getNodeParameter('pollInterval', 0, 15) as number;
-    const initialLookback = this.getNodeParameter('initialLookback', 0, 10) as number;
-    const syncLimit = this.getNodeParameter('syncLimit', 0, 100) as number;
+	async poll(this: IPollFunctions): Promise<INodeExecutionData[][] | null> {
+		const webhookData = this.getWorkflowStaticData('node');
+		const events = this.getNodeParameter('events') as string[];
+		const options = this.getNodeParameter('options') as any;
+		
+		let lastTimestamp = webhookData.lastTimestamp as string;
+		const now = new Date().toISOString();
+		
+		if (!lastTimestamp) {
+			// First time polling - only get events from the last 10 minutes
+			const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+			lastTimestamp = tenMinutesAgo.toISOString();
+		}
 
-    let lastEventId: string | undefined;
-    let active = true;
-    let polling = false;
+		const qs: any = {
+			since: lastTimestamp,
+			events: events.join(','),
+		};
 
-    const pollForEvents = async () => {
-      if (!active || polling) {
-        return;
-      }
+		if (options.boardId) {
+			qs.board_id = options.boardId;
+		}
+		if (options.priority) {
+			qs.priority = options.priority;
+		}
 
-      polling = true;
+		try {
+			const responseData = await kanbanApiRequest.call(this, 'GET', '/events', {}, qs);
+			
+			webhookData.lastTimestamp = now;
 
-      try {
-        const query: IDataObject = {
-          limit: syncLimit,
-        };
+			if (!responseData || !Array.isArray(responseData) || responseData.length === 0) {
+				return null;
+			}
 
-        if (lastEventId) {
-          query.lastEventId = lastEventId;
-        } else if (initialLookback > 0) {
-          const sinceDate = new Date(Date.now() - initialLookback * 60 * 1000);
-          query.since = sinceDate.toISOString();
-        }
+			const returnData: INodeExecutionData[][] = [];
 
-        const events = (await kanbanApiRequest.call(this, 'GET', '/api/sync/events', {}, query)) as IDataObject[];
+			for (const event of responseData) {
+				returnData.push([
+					{
+						json: {
+							event_id: event.id,
+							event_type: event.type,
+							timestamp: event.timestamp,
+							resource: event.resource,
+							resource_id: event.resource_id,
+							changes: event.changes || {},
+							user_id: event.user_id,
+							board_id: event.board_id,
+							...event.data,
+						},
+					},
+				]);
+			}
 
-        if (Array.isArray(events) && events.length > 0) {
-          const filters = eventTypes.length > 0 ? new Set(eventTypes) : undefined;
-          const filtered = filters
-            ? events.filter((event) => filters.has(`${event.resource}.${event.action}`))
-            : events;
-
-          if (filtered.length > 0) {
-            const executionItems: INodeExecutionData[] = filtered.map((event) => ({
-              json: event,
-            }));
-
-            this.emit([executionItems]);
-          }
-
-          lastEventId = events[events.length - 1].id as string;
-        }
-      } catch (error) {
-        console.error('KanbanAppTrigger polling error', error);
-      } finally {
-        polling = false;
-      }
-    };
-
-    const intervalHandle = setInterval(() => {
-      void pollForEvents();
-    }, pollInterval * 1000);
-
-    await pollForEvents();
-
-    return {
-      closeFunction: async () => {
-        active = false;
-        clearInterval(intervalHandle);
-      },
-    };
-  }
+			return returnData;
+		} catch (error) {
+			throw new NodeOperationError(this.getNode(), `Failed to poll for events: ${error.message}`);
+		}
+	}
 }
