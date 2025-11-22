@@ -5,7 +5,7 @@ export class KanbanAppApi implements ICredentialType {
 
   displayName = 'Kanban App API';
 
-  documentationUrl = 'https://github.com/your-username/kanban-app';
+  documentationUrl = 'https://github.com/Drmusab/Kanban-style-task';
 
   properties: INodeProperties[] = [
     {

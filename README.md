@@ -649,15 +649,12 @@ Access filters via the **Filter** button in the board toolbar.
 n8n is a powerful workflow automation tool included with this application.
 
 1. Access n8n at http://localhost:5678
-2. Create a new workflow
-3. Add a Webhook node as trigger
-4. Configure webhook URL: `http://kanban-backend:3001/api/tasks/create`
-5. Add authentication:
-   - Method: Header Auth
-   - Header Name: `x-api-key`
-   - Header Value: Your `N8N_API_KEY` from `.env`
-6. Build your workflow logic
-7. Activate the workflow
+2. Create **Kanban App API** credentials using your backend URL and `N8N_API_KEY`
+3. Add the **Kanban App** node to perform actions (create/update tasks and boards) or the **Kanban App Trigger** node to poll for updates
+4. Configure the node parameters (resource, operation, polling interval, filters) to match your use case
+5. Connect downstream nodes to build your automation logic and activate the workflow
+
+For installation options and manual setup of the custom node package, see [n8n Custom Node Setup](./docs/N8N_CUSTOM_NODE_SETUP.md).
 
 #### Using Webhooks
 
