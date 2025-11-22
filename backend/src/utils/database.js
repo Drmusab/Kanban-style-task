@@ -222,6 +222,15 @@ const initDatabase = () => {
           FOREIGN KEY (rule_id) REFERENCES automation_rules (id) ON DELETE CASCADE
         )`);
 
+        // Settings table for application configuration
+        await runAsync(`CREATE TABLE IF NOT EXISTS settings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          key TEXT UNIQUE NOT NULL,
+          value TEXT NOT NULL,
+          description TEXT,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )`);
+
         // Create indexes for better performance
         await runAsync('CREATE INDEX IF NOT EXISTS idx_tasks_column_id ON tasks(column_id)');
         await runAsync('CREATE INDEX IF NOT EXISTS idx_tasks_swimlane_id ON tasks(swimlane_id)');
@@ -272,6 +281,23 @@ const initDatabase = () => {
 
           for (const tag of tags) {
             await runAsync('INSERT INTO tags (name, color) VALUES (?, ?)', [tag.name, tag.color]);
+          }
+        }
+
+        // Insert default settings if none exist
+        const settingsCount = await getAsync('SELECT COUNT(*) as count FROM settings');
+        if (!settingsCount || settingsCount.count === 0) {
+          const defaultSettings = [
+            { key: 'report_schedule_day', value: '1', description: 'Day of week for weekly report (0=Sunday, 1=Monday, etc.)' },
+            { key: 'report_schedule_hour', value: '9', description: 'Hour of day for weekly report (0-23)' },
+            { key: 'report_schedule_minute', value: '0', description: 'Minute of hour for weekly report (0, 15, 30, 45)' }
+          ];
+
+          for (const setting of defaultSettings) {
+            await runAsync(
+              'INSERT INTO settings (key, value, description) VALUES (?, ?, ?)',
+              [setting.key, setting.value, setting.description]
+            );
           }
         }
 

@@ -33,6 +33,7 @@ import {
 } from '@mui/icons-material';
 import { getIntegrations, createIntegration, updateIntegration, deleteIntegration, testN8nWebhook } from '../services/integrationService';
 import { getAutomationRules, createAutomationRule, updateAutomationRule, deleteAutomationRule } from '../services/automationService';
+import { getSettings, updateReportSchedule } from '../services/settingsService';
 import { useNotification } from '../contexts/NotificationContext';
 
 const Settings = () => {
@@ -50,17 +51,33 @@ const Settings = () => {
   const [apiKey, setApiKey] = useState('');
   const [darkMode, setDarkMode] = useState(false);
   const [notifications, setNotifications] = useState(true);
+  const [reportDay, setReportDay] = useState(1); // 1 = Monday
+  const [reportHour, setReportHour] = useState(9);
+  const [reportMinute, setReportMinute] = useState(0);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [integrationsResponse, automationRulesResponse] = await Promise.all([
+        const [integrationsResponse, automationRulesResponse, settingsResponse] = await Promise.all([
           getIntegrations(),
-          getAutomationRules()
+          getAutomationRules(),
+          getSettings()
         ]);
         
         setIntegrations(integrationsResponse.data);
         setAutomationRules(automationRulesResponse.data);
+        
+        // Load report schedule settings
+        const settings = settingsResponse.data;
+        if (settings.report_schedule_day) {
+          setReportDay(parseInt(settings.report_schedule_day));
+        }
+        if (settings.report_schedule_hour) {
+          setReportHour(parseInt(settings.report_schedule_hour));
+        }
+        if (settings.report_schedule_minute) {
+          setReportMinute(parseInt(settings.report_schedule_minute));
+        }
       } catch (error) {
         showError('Failed to load settings data');
       }
@@ -177,6 +194,15 @@ const Settings = () => {
     }
   };
 
+  const handleSaveReportSchedule = async () => {
+    try {
+      await updateReportSchedule(reportDay, reportHour, reportMinute);
+      showSuccess('Report schedule updated successfully. Server restart required for changes to take effect.');
+    } catch (error) {
+      showError('Failed to update report schedule');
+    }
+  };
+
   return (
     <Box sx={{ p: 2 }}>
       <Typography variant="h4" gutterBottom>
@@ -207,50 +233,183 @@ const Settings = () => {
       </Box>
       
       {activeTab === 'general' && (
-        <Card>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              General Settings
-            </Typography>
-            
-            <Grid container spacing={2}>
-              <Grid item xs={12}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={darkMode}
-                      onChange={(e) => setDarkMode(e.target.checked)}
-                    />
-                  }
-                  label="Dark Mode"
-                />
+        <>
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                General Settings
+              </Typography>
+              
+              <Grid container spacing={2}>
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={darkMode}
+                        onChange={(e) => setDarkMode(e.target.checked)}
+                      />
+                    }
+                    label="Dark Mode"
+                  />
+                </Grid>
+                
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={notifications}
+                        onChange={(e) => setNotifications(e.target.checked)}
+                      />
+                    }
+                    label="Enable Notifications"
+                  />
+                </Grid>
               </Grid>
               
-              <Grid item xs={12}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={notifications}
-                      onChange={(e) => setNotifications(e.target.checked)}
-                    />
-                  }
-                  label="Enable Notifications"
-                />
+              <Divider sx={{ my: 3 }} />
+              
+              <Typography variant="h6" gutterBottom>
+                Weekly Report Schedule
+              </Typography>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Configure when the automated weekly report should be generated and sent to n8n webhooks.
+              </Typography>
+              
+              <Grid container spacing={2} sx={{ mt: 1 }}>
+                <Grid item xs={12} sm={4}>
+                  <FormControl fullWidth>
+                    <InputLabel>Day of Week</InputLabel>
+                    <Select
+                      value={reportDay}
+                      onChange={(e) => setReportDay(e.target.value)}
+                      label="Day of Week"
+                    >
+                      <MenuItem value={0}>Sunday</MenuItem>
+                      <MenuItem value={1}>Monday</MenuItem>
+                      <MenuItem value={2}>Tuesday</MenuItem>
+                      <MenuItem value={3}>Wednesday</MenuItem>
+                      <MenuItem value={4}>Thursday</MenuItem>
+                      <MenuItem value={5}>Friday</MenuItem>
+                      <MenuItem value={6}>Saturday</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                
+                <Grid item xs={12} sm={4}>
+                  <FormControl fullWidth>
+                    <InputLabel>Hour</InputLabel>
+                    <Select
+                      value={reportHour}
+                      onChange={(e) => setReportHour(e.target.value)}
+                      label="Hour"
+                    >
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <MenuItem key={i} value={i}>
+                          {i.toString().padStart(2, '0')}:00
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                
+                <Grid item xs={12} sm={4}>
+                  <FormControl fullWidth>
+                    <InputLabel>Minute</InputLabel>
+                    <Select
+                      value={reportMinute}
+                      onChange={(e) => setReportMinute(e.target.value)}
+                      label="Minute"
+                    >
+                      <MenuItem value={0}>00</MenuItem>
+                      <MenuItem value={15}>15</MenuItem>
+                      <MenuItem value={30}>30</MenuItem>
+                      <MenuItem value={45}>45</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
               </Grid>
-            </Grid>
-            
-            <Divider sx={{ my: 2 }} />
-            
-            <Typography variant="h6" gutterBottom>
-              Backup & Restore
-            </Typography>
-            
-            <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
-              <Button variant="contained">Backup Data</Button>
-              <Button variant="outlined">Restore Data</Button>
-            </Box>
-          </CardContent>
-        </Card>
+              
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="body2" color="primary">
+                  Current Schedule: Every{' '}
+                  {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][reportDay]}{' '}
+                  at {reportHour.toString().padStart(2, '0')}:{reportMinute.toString().padStart(2, '0')}
+                </Typography>
+              </Box>
+              
+              <Button variant="contained" sx={{ mt: 2 }} onClick={handleSaveReportSchedule}>
+                Save Report Schedule
+              </Button>
+              
+              <Divider sx={{ my: 3 }} />
+              
+              <Typography variant="h6" gutterBottom>
+                Backup & Restore
+              </Typography>
+              
+              <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+                <Button variant="contained">Backup Data</Button>
+                <Button variant="outlined">Restore Data</Button>
+              </Box>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                n8n Webhook Configuration
+              </Typography>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Configure your n8n webhook URL for receiving automated notifications, task updates, and reports. 
+                This is the primary integration point between the Kanban app and n8n workflows.
+              </Typography>
+              
+              <Box sx={{ mt: 2, p: 2, bgcolor: 'info.light', borderRadius: 1 }}>
+                <Typography variant="body2" color="info.contrastText">
+                  <strong>Quick Setup:</strong> Go to the Integrations tab to add an n8n webhook, or use the button below to test a webhook URL.
+                </Typography>
+              </Box>
+              
+              <Grid container spacing={2} sx={{ mt: 2 }}>
+                <Grid item xs={12}>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Active n8n Webhooks: {integrations.filter(i => i.type === 'n8n_webhook' && i.enabled).length}
+                  </Typography>
+                  {integrations.filter(i => i.type === 'n8n_webhook' && i.enabled).map(integration => (
+                    <Chip
+                      key={integration.id}
+                      label={integration.name}
+                      color="success"
+                      size="small"
+                      sx={{ mr: 1, mb: 1 }}
+                    />
+                  ))}
+                  {integrations.filter(i => i.type === 'n8n_webhook' && i.enabled).length === 0 && (
+                    <Typography variant="body2" color="text.secondary">
+                      No active webhooks configured. Add one in the Integrations tab.
+                    </Typography>
+                  )}
+                </Grid>
+              </Grid>
+              
+              <Box sx={{ display: 'flex', gap: 2, mt: 3 }}>
+                <Button
+                  variant="outlined"
+                  startIcon={<PlayArrow />}
+                  onClick={() => setTestWebhookDialogOpen(true)}
+                >
+                  Test Webhook Connection
+                </Button>
+                <Button
+                  variant="contained"
+                  onClick={() => setActiveTab('integrations')}
+                >
+                  Manage Webhooks
+                </Button>
+              </Box>
+            </CardContent>
+          </Card>
+        </>
       )}
       
       {activeTab === 'integrations' && (
