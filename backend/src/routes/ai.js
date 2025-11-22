@@ -1,8 +1,9 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const { runAsync, getAsync } = require('../utils/database');
+const { runAsync, getAsync, allAsync } = require('../utils/database');
 const { recordTaskHistory } = require('../utils/history');
 const { emitEvent } = require('../services/eventBus');
+const { generateWeeklyReport, generateProductivityAnalytics } = require('../services/reporting');
 
 const router = express.Router();
 
@@ -21,12 +22,12 @@ const getNextPosition = async (columnId) => {
   return ((row && row.maxPosition) || 0) + 1;
 };
 
-const createTask = async ({ title, description = '', columnId, dueDate }) => {
+const createTask = async ({ title, description = '', columnId, dueDate, priority = 'medium' }) => {
   const position = await getNextPosition(columnId);
   const insertResult = await runAsync(
-    `INSERT INTO tasks (title, description, column_id, position, due_date)
-     VALUES (?, ?, ?, ?, ?)` ,
-    [title, description, columnId, position, dueDate || null]
+    `INSERT INTO tasks (title, description, column_id, position, priority, due_date)
+     VALUES (?, ?, ?, ?, ?, ?)` ,
+    [title, description, columnId, position, priority, dueDate || null]
   );
 
   recordTaskHistory(insertResult.lastID, 'created', null, null, null);
@@ -54,13 +55,45 @@ const updateTaskDueDate = async (taskId, dueDate) => {
   emitEvent('task', 'updated', { taskId, dueDate });
 };
 
+const updateTaskPriority = async (taskId, priority) => {
+  await runAsync(
+    'UPDATE tasks SET priority = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [priority, taskId]
+  );
+  recordTaskHistory(taskId, 'updated', 'priority', priority, null);
+  emitEvent('task', 'updated', { taskId, priority });
+};
+
 const parseCreateCommand = (command) => {
-  const match = command.match(/create (?:a )?task(?: called| named)?\s+"?([^\"]+?)"?(?: in| to)?\s+(?:column )?"?([^\"]+?)"?/i);
-  if (match) {
+  // Enhanced patterns for task creation
+  // "Create task "Write release notes" in Done"
+  // "Add task "Fix bug" to In Progress with high priority"
+  // "Create high priority task "Deploy" in Done"
+  const patterns = [
+    /create (?:a )?(?:(low|medium|high|critical) priority )?task(?: called| named)?\s+"?([^\"]+?)"?(?: in| to)?\s+(?:column )?"?([^\"]+?)"?(?:\s+with (low|medium|high|critical) priority)?/i,
+    /add (?:a )?(?:(low|medium|high|critical) priority )?task(?: called| named)?\s+"?([^\"]+?)"?(?: in| to)?\s+(?:column )?"?([^\"]+?)"?(?:\s+with (low|medium|high|critical) priority)?/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = command.match(pattern);
+    if (match) {
+      return {
+        action: 'create',
+        title: normalize(match[2] || match[3]),
+        columnName: normalize(match[3] || match[4]),
+        priority: match[1] || match[4] || 'medium'
+      };
+    }
+  }
+
+  // Simple pattern without priority
+  const simpleMatch = command.match(/create (?:a )?task(?: called| named)?\s+"?([^\"]+?)"?(?: in| to)?\s+(?:column )?"?([^\"]+?)"?/i);
+  if (simpleMatch) {
     return {
       action: 'create',
-      title: normalize(match[1]),
-      columnName: normalize(match[2])
+      title: normalize(simpleMatch[1]),
+      columnName: normalize(simpleMatch[2]),
+      priority: 'medium'
     };
   }
   return null;
@@ -79,7 +112,7 @@ const parseMoveCommand = (command) => {
 };
 
 const parseCompleteCommand = (command) => {
-  const match = command.match(/(?:complete|mark) task\s+"?([^\"]+?)"?/i);
+  const match = command.match(/(?:complete|mark|finish) task\s+"?([^\"]+?)"?/i);
   if (match) {
     return { action: 'complete', title: normalize(match[1]) };
   }
@@ -94,12 +127,54 @@ const parseDueDateCommand = (command) => {
   return null;
 };
 
+const parsePriorityCommand = (command) => {
+  const match = command.match(/set (?:task\s+)?"?([^\"]+?)"?\s+(?:priority )?to\s+(low|medium|high|critical)/i);
+  if (match) {
+    return { action: 'set_priority', title: normalize(match[1]), priority: match[2].toLowerCase() };
+  }
+  return null;
+};
+
+const parseListCommand = (command) => {
+  // "List tasks in To Do"
+  // "Show all tasks"
+  // "Get tasks in In Progress"
+  if (/list (?:all )?tasks(?:\s+in\s+"?([^\"]+?)"?)?/i.test(command)) {
+    const match = command.match(/list (?:all )?tasks(?:\s+in\s+"?([^\"]+?)"?)?/i);
+    return {
+      action: 'list',
+      columnName: match[1] ? normalize(match[1]) : null
+    };
+  }
+  if (/(?:show|get) (?:all )?tasks(?:\s+in\s+"?([^\"]+?)"?)?/i.test(command)) {
+    const match = command.match(/(?:show|get) (?:all )?tasks(?:\s+in\s+"?([^\"]+?)"?)?/i);
+    return {
+      action: 'list',
+      columnName: match[1] ? normalize(match[1]) : null
+    };
+  }
+  return null;
+};
+
+const parseReportCommand = (command) => {
+  // "Show weekly report"
+  // "Generate report"
+  // "Get analytics"
+  if (/(?:show|generate|get)\s+(?:weekly\s+)?(?:report|analytics)/i.test(command)) {
+    return { action: 'report' };
+  }
+  return null;
+};
+
 const parseCommand = (command) => {
   return (
     parseCreateCommand(command) ||
     parseMoveCommand(command) ||
     parseCompleteCommand(command) ||
-    parseDueDateCommand(command)
+    parseDueDateCommand(command) ||
+    parsePriorityCommand(command) ||
+    parseListCommand(command) ||
+    parseReportCommand(command)
   );
 };
 
@@ -117,19 +192,64 @@ router.post('/command', [body('command').notEmpty().withMessage('Command text is
   }
 
   try {
+    // Handle list command
+    if (parsed.action === 'list') {
+      let query = 'SELECT t.*, c.name as column_name FROM tasks t JOIN columns c ON t.column_id = c.id';
+      let params = [];
+
+      if (parsed.columnName) {
+        const column = await findColumnByName(parsed.columnName);
+        if (!column) {
+          return res.status(404).json({ error: `Column "${parsed.columnName}" was not found` });
+        }
+        query += ' WHERE t.column_id = ?';
+        params.push(column.id);
+      }
+
+      query += ' ORDER BY t.position ASC';
+      const tasks = await allAsync(query, params);
+
+      return res.json({
+        action: 'list',
+        success: true,
+        count: tasks.length,
+        tasks,
+        message: parsed.columnName 
+          ? `Found ${tasks.length} tasks in ${parsed.columnName}`
+          : `Found ${tasks.length} total tasks`
+      });
+    }
+
+    // Handle report command
+    if (parsed.action === 'report') {
+      const report = await generateWeeklyReport();
+      return res.json({
+        action: 'report',
+        success: true,
+        report,
+        message: 'Weekly report generated successfully'
+      });
+    }
+
+    // Handle create command with priority support
     if (parsed.action === 'create') {
       const column = await findColumnByName(parsed.columnName);
       if (!column) {
         return res.status(404).json({ error: `Column "${parsed.columnName}" was not found` });
       }
 
-      const taskId = await createTask({ title: parsed.title, columnId: column.id });
+      const taskId = await createTask({ 
+        title: parsed.title, 
+        columnId: column.id, 
+        priority: parsed.priority 
+      });
       return res.json({
         action: 'create',
         success: true,
         taskId,
         columnId: column.id,
-        message: `Created task "${parsed.title}" in ${column.name}`
+        priority: parsed.priority,
+        message: `Created ${parsed.priority} priority task "${parsed.title}" in ${column.name}`
       });
     }
 
@@ -138,6 +258,7 @@ router.post('/command', [body('command').notEmpty().withMessage('Command text is
       return res.status(404).json({ error: `Task "${parsed.title}" not found` });
     }
 
+    // Handle move command
     if (parsed.action === 'move') {
       const column = await findColumnByName(parsed.columnName);
       if (!column) {
@@ -154,6 +275,7 @@ router.post('/command', [body('command').notEmpty().withMessage('Command text is
       });
     }
 
+    // Handle complete command
     if (parsed.action === 'complete') {
       const doneColumn = await findColumnByName('Done');
       if (!doneColumn) {
@@ -170,6 +292,7 @@ router.post('/command', [body('command').notEmpty().withMessage('Command text is
       });
     }
 
+    // Handle due date command
     if (parsed.action === 'set_due') {
       const dueDate = new Date(parsed.dueDate);
       if (Number.isNaN(dueDate.getTime())) {
@@ -186,6 +309,18 @@ router.post('/command', [body('command').notEmpty().withMessage('Command text is
       });
     }
 
+    // Handle priority command
+    if (parsed.action === 'set_priority') {
+      await updateTaskPriority(task.id, parsed.priority);
+      return res.json({
+        action: 'set_priority',
+        success: true,
+        taskId: task.id,
+        priority: parsed.priority,
+        message: `Updated priority for "${task.title}" to ${parsed.priority}`
+      });
+    }
+
     return res.status(400).json({ error: 'Command detected but no action executed.' });
   } catch (error) {
     console.error('AI command execution failed:', error);
@@ -196,12 +331,37 @@ router.post('/command', [body('command').notEmpty().withMessage('Command text is
 router.get('/patterns', async (_req, res) => {
   res.json({
     examples: [
+      // Task creation
       'Create task "Write release notes" in Done',
+      'Add high priority task "Fix critical bug" to In Progress',
+      'Create task "Deploy to production" in To Do with high priority',
+      
+      // Task management
       'Move task "Upgrade dependencies" to In Progress',
       'Complete task "Push to production"',
-      'Set due date for task "Write tests" to 2024-11-01 17:00'
+      'Set due date for task "Write tests" to 2024-11-01 17:00',
+      'Set task "Fix bug" priority to high',
+      
+      // Queries
+      'List tasks in To Do',
+      'Show all tasks',
+      'Get tasks in In Progress',
+      
+      // Reports
+      'Show weekly report',
+      'Generate report',
+      'Get analytics'
     ],
-    description: 'These commands are designed for n8n AI Agent nodes to translate natural language into Kanban CRUD actions.'
+    description: 'These commands are designed for n8n AI Agent nodes to translate natural language into Kanban operations.',
+    supportedActions: [
+      'create - Create a new task with optional priority',
+      'move - Move a task to a different column',
+      'complete - Mark a task as complete',
+      'set_due - Set or update a task due date',
+      'set_priority - Update task priority (low, medium, high, critical)',
+      'list - List tasks (all or filtered by column)',
+      'report - Generate weekly report with analytics'
+    ]
   });
 });
 

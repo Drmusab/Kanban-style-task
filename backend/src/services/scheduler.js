@@ -1,8 +1,9 @@
 const cron = require('node-cron');
 const { db } = require('../utils/database');
 const { triggerAutomation } = require('./automation');
-const { sendNotification } = require('./notifications');
+const { sendTaskDueNotification, sendRoutineReminder } = require('./notifications');
 const { createRecurringTask } = require('./tasks');
+const { generateWeeklyReport, sendReportToN8n } = require('./reporting');
 
 // Start the scheduler
 const startScheduler = () => {
@@ -26,6 +27,7 @@ const startScheduler = () => {
           for (const task of tasks) {
             const dueDate = new Date(task.due_date);
             const nowDate = new Date();
+            const minutesUntilDue = Math.floor((dueDate - nowDate) / (60 * 1000));
             
             // Check if task is overdue (more than 1 hour past due date)
             if (nowDate - dueDate > 60 * 60 * 1000) {
@@ -33,10 +35,7 @@ const startScheduler = () => {
               triggerAutomation('task_overdue', { taskId: task.id, columnId: task.column_id });
               
               // Send notification for overdue task
-              sendNotification(
-                `Overdue Task: ${task.title}`,
-                `Task "${task.title}" was due on ${dueDate.toLocaleDateString()} at ${dueDate.toLocaleTimeString()}`
-              );
+              sendTaskDueNotification(task, minutesUntilDue);
             }
             // Check if task is due (within 1 hour of due date)
             else if (nowDate - dueDate >= 0) {
@@ -44,10 +43,7 @@ const startScheduler = () => {
               triggerAutomation('task_due', { taskId: task.id, columnId: task.column_id });
               
               // Send notification for due task
-              sendNotification(
-                `Due Task: ${task.title}`,
-                `Task "${task.title}" is due now`
-              );
+              sendTaskDueNotification(task, 0);
             }
             // Check if task is due soon (within 1 hour of due date)
             else if (dueDate - nowDate <= 60 * 60 * 1000) {
@@ -55,10 +51,7 @@ const startScheduler = () => {
               triggerAutomation('task_due_soon', { taskId: task.id, columnId: task.column_id });
               
               // Send notification for task due soon
-              sendNotification(
-                `Task Due Soon: ${task.title}`,
-                `Task "${task.title}" is due at ${dueDate.toLocaleTimeString()}`
-              );
+              sendTaskDueNotification(task, minutesUntilDue);
             }
           }
         }
@@ -90,6 +83,9 @@ const startScheduler = () => {
               // Check if we need to create a new instance of this recurring task
               if (shouldCreateRecurringTask(lastDueDate, recurringRule, today)) {
                 await createRecurringTask(task, recurringRule);
+                
+                // Send routine reminder for the new instance
+                sendRoutineReminder(task);
               }
             } catch (error) {
               console.error(`Error processing recurring task ${task.id}:`, error);
@@ -99,6 +95,18 @@ const startScheduler = () => {
       );
     } catch (error) {
       console.error('Error in recurring task scheduler:', error);
+    }
+  });
+  
+  // Generate and send weekly reports to n8n every Monday at 9:00 AM
+  cron.schedule('0 9 * * 1', async () => {
+    try {
+      console.log('Generating and sending weekly report to n8n...');
+      const report = await generateWeeklyReport();
+      await sendReportToN8n(report);
+      console.log('Weekly report sent to n8n successfully');
+    } catch (error) {
+      console.error('Error sending weekly report to n8n:', error);
     }
   });
   

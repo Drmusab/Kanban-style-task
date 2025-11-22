@@ -1,59 +1,83 @@
 const express = require('express');
 const router = express.Router();
-const { allAsync } = require('../utils/database');
+const { 
+  generateWeeklyReport, 
+  generateCustomReport, 
+  sendReportToN8n,
+  generateProductivityAnalytics 
+} = require('../services/reporting');
 
-const WEEK_DAYS = 7;
-
-const getSevenDaysAgo = () => {
-  const date = new Date();
-  date.setDate(date.getDate() - WEEK_DAYS);
-  return date.toISOString();
-};
-
+// Get weekly report
 router.get('/weekly', async (_req, res) => {
   try {
-    const since = getSevenDaysAgo();
-
-    const created = await allAsync(
-      'SELECT COUNT(*) as count FROM tasks WHERE created_at >= ?',
-      [since]
-    );
-    const createdCount = created?.[0]?.count || 0;
-
-    const completed = await allAsync(
-      `SELECT COUNT(*) as count
-       FROM tasks t
-       JOIN columns c ON t.column_id = c.id
-       WHERE LOWER(c.name) = 'done' AND t.updated_at >= ?`,
-      [since]
-    );
-    const completedCount = completed?.[0]?.count || 0;
-
-    const overdue = await allAsync(
-      'SELECT COUNT(*) as count FROM tasks WHERE due_date IS NOT NULL AND due_date < ? AND column_id NOT IN (SELECT id FROM columns WHERE LOWER(name) = "done")',
-      [new Date().toISOString()]
-    );
-    const overdueCount = overdue?.[0]?.count || 0;
-
-    const byColumn = await allAsync(
-      `SELECT c.name as column, COUNT(t.id) as count
-       FROM columns c
-       LEFT JOIN tasks t ON t.column_id = c.id
-       GROUP BY c.id
-       ORDER BY c.position ASC`
-    );
-
-    res.json({
-      rangeStart: since,
-      rangeEnd: new Date().toISOString(),
-      created: createdCount,
-      completed: completedCount,
-      overdue: overdueCount,
-      byColumn,
-    });
+    const report = await generateWeeklyReport();
+    res.json(report);
   } catch (error) {
     console.error('Failed to build weekly report:', error);
     res.status(500).json({ error: 'Unable to generate report', details: error.message });
+  }
+});
+
+// Get custom date range report
+router.get('/custom', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    
+    if (!startDate || !endDate) {
+      return res.status(400).json({ 
+        error: 'Both startDate and endDate query parameters are required' 
+      });
+    }
+
+    const report = await generateCustomReport(startDate, endDate);
+    res.json(report);
+  } catch (error) {
+    console.error('Failed to build custom report:', error);
+    res.status(500).json({ error: 'Unable to generate report', details: error.message });
+  }
+});
+
+// Get productivity analytics
+router.get('/analytics', async (req, res) => {
+  try {
+    const days = parseInt(req.query.days || '30', 10);
+    const analytics = await generateProductivityAnalytics(days);
+    res.json(analytics);
+  } catch (error) {
+    console.error('Failed to generate analytics:', error);
+    res.status(500).json({ error: 'Unable to generate analytics', details: error.message });
+  }
+});
+
+// Send weekly report to n8n webhooks
+router.post('/weekly/send-to-n8n', async (_req, res) => {
+  try {
+    const report = await generateWeeklyReport();
+    const result = await sendReportToN8n(report);
+    res.json(result);
+  } catch (error) {
+    console.error('Failed to send report to n8n:', error);
+    res.status(500).json({ error: 'Unable to send report', details: error.message });
+  }
+});
+
+// Send custom report to n8n webhooks
+router.post('/custom/send-to-n8n', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.body;
+    
+    if (!startDate || !endDate) {
+      return res.status(400).json({ 
+        error: 'Both startDate and endDate are required' 
+      });
+    }
+
+    const report = await generateCustomReport(startDate, endDate);
+    const result = await sendReportToN8n(report);
+    res.json(result);
+  } catch (error) {
+    console.error('Failed to send report to n8n:', error);
+    res.status(500).json({ error: 'Unable to send report', details: error.message });
   }
 });
 
