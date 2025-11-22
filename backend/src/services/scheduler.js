@@ -101,6 +101,59 @@ const startScheduler = () => {
       console.error('Error in recurring task scheduler:', error);
     }
   });
+
+  // Check for routine lead-time notifications every minute
+  cron.schedule('* * * * *', async () => {
+    try {
+      const now = new Date();
+
+      db.all(
+        'SELECT * FROM tasks WHERE recurring_rule IS NOT NULL AND due_date IS NOT NULL',
+        [],
+        async (err, tasks) => {
+          if (err) {
+            console.error('Error checking routine notifications:', err);
+            return;
+          }
+
+          for (const task of tasks) {
+            const recurringRule = parseRecurringRule(task.recurring_rule);
+
+            if (recurringRule.status === 'paused') {
+              continue;
+            }
+
+            const dueDate = new Date(task.due_date);
+            if (Number.isNaN(dueDate.getTime())) {
+              continue;
+            }
+
+            const minutesUntilDue = Math.floor((dueDate - now) / MILLISECONDS_PER_MINUTE);
+            const shouldNotify = minutesUntilDue <= recurringRule.notificationLeadTime
+              && minutesUntilDue >= (recurringRule.notificationLeadTime - 1);
+
+            const alreadyNotified = recurringRule.lastNotificationAt
+              && new Date(recurringRule.lastNotificationAt) > new Date(now.getTime() - MILLISECONDS_PER_HOUR);
+
+            if (shouldNotify && !alreadyNotified) {
+              try {
+                await sendRoutineReminder(task);
+                recurringRule.lastNotificationAt = new Date().toISOString();
+                await db.run(
+                  'UPDATE tasks SET recurring_rule = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+                  [JSON.stringify(recurringRule), task.id]
+                );
+              } catch (error) {
+                console.error(`Failed to send routine reminder for task ${task.id}:`, error);
+              }
+            }
+          }
+        }
+      );
+    } catch (error) {
+      console.error('Error in routine notification scheduler:', error);
+    }
+  });
   
   // Generate and send weekly reports to n8n every Monday at 9:00 AM
   cron.schedule('0 9 * * 1', async () => {
@@ -150,7 +203,7 @@ const calculateNextDueDate = (lastDueDate, recurringRule) => {
 
   const { frequency, interval, endDate, maxOccurrences } = recurringRule;
   const nextDueDate = new Date(lastDueDate);
-  
+
   switch (frequency) {
     case 'daily':
       nextDueDate.setDate(nextDueDate.getDate() + (interval || 1));
@@ -167,13 +220,27 @@ const calculateNextDueDate = (lastDueDate, recurringRule) => {
     default:
       return null;
   }
-  
+
   // Check if we've reached the end date
   if (endDate && new Date(endDate) < nextDueDate) {
     return null;
   }
-  
+
   return nextDueDate;
+};
+
+const parseRecurringRule = (ruleString) => {
+  try {
+    const parsed = typeof ruleString === 'string' ? JSON.parse(ruleString) : (ruleString || {});
+    return {
+      interval: parsed.interval || 1,
+      notificationLeadTime: parsed.notificationLeadTime || 60,
+      status: parsed.status || 'active',
+      ...parsed,
+    };
+  } catch (error) {
+    return { interval: 1, notificationLeadTime: 60, status: 'active' };
+  }
 };
 
 module.exports = { startScheduler };

@@ -79,14 +79,17 @@ const sendTaskReminder = async (task) => {
 const sendRoutineReminder = async (task) => {
   const title = 'Routine Reminder';
   const message = `Routine task "${task.title}" is scheduled`;
-  
+
+  const recurringRule = safeParseRecurringRule(task.recurring_rule);
+
   return sendNotification(title, message, {
     type: 'routine',
     taskId: task.id,
     priority: task.priority || 'normal',
     metadata: {
       dueDate: task.due_date,
-      recurringRule: task.recurring_rule
+      recurringRule: task.recurring_rule,
+      notificationLeadTime: recurringRule.notificationLeadTime
     }
   });
 };
@@ -110,9 +113,21 @@ const sendTaskDueNotification = async (task, minutesUntilDue) => {
   });
 };
 
-module.exports = { 
+module.exports = {
   sendNotification,
   sendTaskReminder,
   sendRoutineReminder,
   sendTaskDueNotification
+};
+
+const safeParseRecurringRule = (ruleString) => {
+  try {
+    const parsed = typeof ruleString === 'string' ? JSON.parse(ruleString) : (ruleString || {});
+    return {
+      notificationLeadTime: parsed.notificationLeadTime || 60,
+      ...parsed,
+    };
+  } catch (error) {
+    return { notificationLeadTime: 60 };
+  }
 };
