@@ -48,7 +48,7 @@ const Boards = () => {
         setBoards(response.data);
         setLoading(false);
       } catch (error) {
-        showError('Failed to load boards');
+        showError('فشل تحميل اللوحات');
         setLoading(false);
       }
     };
@@ -63,8 +63,8 @@ const Boards = () => {
         description: boardDescription,
         created_by: user.id
       });
-      
-      showSuccess('Board created successfully');
+
+      showSuccess('تم إنشاء اللوحة بنجاح');
       setDialogOpen(false);
       setBoardName('');
       setBoardDescription('');
@@ -73,20 +73,20 @@ const Boards = () => {
       const response = await getBoards();
       setBoards(response.data);
     } catch (error) {
-      showError('Failed to create board');
+      showError('فشل إنشاء اللوحة');
     }
   };
 
   const handleDeleteBoard = async (boardId) => {
     try {
       await deleteBoard(boardId);
-      showSuccess('Board deleted successfully');
+      showSuccess('تم حذف اللوحة بنجاح');
       
       // Refresh boards
       const response = await getBoards();
       setBoards(response.data);
     } catch (error) {
-      showError('Failed to delete board');
+      showError('فشل حذف اللوحة');
     }
     
     setMenuAnchor(null);
@@ -96,14 +96,14 @@ const Boards = () => {
     try {
       const board = boards.find(b => b.id === boardId);
       await duplicateBoard(boardId, `${board.name} (Copy)`, user.id);
-      
-      showSuccess('Board duplicated successfully');
+
+      showSuccess('تم نسخ اللوحة بنجاح');
       
       // Refresh boards
       const response = await getBoards();
       setBoards(response.data);
     } catch (error) {
-      showError('Failed to duplicate board');
+      showError('فشل نسخ اللوحة');
     }
     
     setMenuAnchor(null);
@@ -120,13 +120,13 @@ const Boards = () => {
   };
 
   if (loading) {
-    return <Typography>Loading boards...</Typography>;
+    return <Typography>جاري تحميل اللوحات...</Typography>;
   }
 
   return (
     <Box sx={{ p: 2 }}>
       <Typography variant="h4" gutterBottom>
-        My Boards
+        لوحاتي
       </Typography>
       
       <Grid container spacing={3}>
@@ -166,7 +166,7 @@ const Boards = () => {
                   </Typography>
                 )}
                 <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
-                  Created: {new Date(board.created_at).toLocaleDateString()}
+                  تم الإنشاء: {new Date(board.created_at).toLocaleDateString()}
                 </Typography>
               </CardContent>
             </Card>
@@ -186,14 +186,14 @@ const Boards = () => {
       >
         <Add />
       </Fab>
-      
+
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Create New Board</DialogTitle>
+        <DialogTitle>إنشاء لوحة جديدة</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
             margin="dense"
-            label="Board Name"
+            label="اسم اللوحة"
             fullWidth
             variant="outlined"
             value={boardName}
@@ -202,7 +202,7 @@ const Boards = () => {
           />
           <TextField
             margin="dense"
-            label="Description"
+            label="الوصف"
             fullWidth
             variant="outlined"
             multiline
@@ -213,8 +213,8 @@ const Boards = () => {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleCreateBoard} variant="contained">Create</Button>
+          <Button onClick={() => setDialogOpen(false)}>إلغاء</Button>
+          <Button onClick={handleCreateBoard} variant="contained">إنشاء</Button>
         </DialogActions>
       </Dialog>
       
@@ -227,18 +227,18 @@ const Boards = () => {
           navigate(`/board/${selectedBoard.id}`);
           handleMenuClose();
         }}>
-          Open
+          فتح
         </MenuItem>
         <MenuItem onClick={() => {
           handleDuplicateBoard(selectedBoard.id);
         }}>
-          <ContentCopy sx={{ mr: 1 }} /> Duplicate
+          <ContentCopy sx={{ mr: 1 }} /> تكرار
         </MenuItem>
         <Divider />
         <MenuItem onClick={() => {
           handleDeleteBoard(selectedBoard.id);
         }}>
-          <Delete sx={{ mr: 1 }} /> Delete
+          <Delete sx={{ mr: 1 }} /> حذف
         </MenuItem>
       </Menu>
     </Box>

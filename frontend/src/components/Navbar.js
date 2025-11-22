@@ -59,7 +59,7 @@ const Navbar = () => {
     <AppBar position="static">
       <Toolbar>
         <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-          Kanban Task Manager
+          مدير مهام كانبان
         </Typography>
         
         {!isMobile && (
@@ -70,7 +70,7 @@ const Navbar = () => {
               onClick={() => navigate('/boards')}
               variant={location.pathname === '/boards' ? 'outlined' : 'text'}
             >
-              Boards
+              اللوحات
             </Button>
             <Button
               color="inherit"
@@ -78,7 +78,7 @@ const Navbar = () => {
               onClick={() => navigate('/calendar')}
               variant={location.pathname === '/calendar' ? 'outlined' : 'text'}
             >
-              Calendar
+              التقويم
             </Button>
             <Button
               color="inherit"
@@ -86,7 +86,7 @@ const Navbar = () => {
               onClick={() => navigate('/routines')}
               variant={location.pathname === '/routines' ? 'outlined' : 'text'}
             >
-              Routines
+              الجداول الدورية
             </Button>
             <Button
               color="inherit"
@@ -94,15 +94,15 @@ const Navbar = () => {
               onClick={() => navigate('/analytics')}
               variant={location.pathname === '/analytics' ? 'outlined' : 'text'}
             >
-              Analytics
+              التحليلات
             </Button>
-            <Button 
-              color="inherit" 
+            <Button
+              color="inherit"
               startIcon={<Settings />}
               onClick={() => navigate('/settings')}
               variant={location.pathname === '/settings' ? 'outlined' : 'text'}
             >
-              Settings
+              الإعدادات
             </Button>
           </Box>
         )}
@@ -140,24 +140,24 @@ const Navbar = () => {
             {isMobile && (
               <>
                 <MenuItem onClick={() => handleNavigation('/boards')}>
-                  <Dashboard sx={{ mr: 1 }} /> Boards
+                  <Dashboard sx={{ mr: 1 }} /> اللوحات
                 </MenuItem>
                 <MenuItem onClick={() => handleNavigation('/calendar')}>
-                  <Event sx={{ mr: 1 }} /> Calendar
+                  <Event sx={{ mr: 1 }} /> التقويم
                 </MenuItem>
                 <MenuItem onClick={() => handleNavigation('/routines')}>
-                  <Repeat sx={{ mr: 1 }} /> Routines
+                  <Repeat sx={{ mr: 1 }} /> الجداول الدورية
                 </MenuItem>
                 <MenuItem onClick={() => handleNavigation('/analytics')}>
-                  <Analytics sx={{ mr: 1 }} /> Analytics
+                  <Analytics sx={{ mr: 1 }} /> التحليلات
                 </MenuItem>
                 <MenuItem onClick={() => handleNavigation('/settings')}>
-                  <Settings sx={{ mr: 1 }} /> Settings
+                  <Settings sx={{ mr: 1 }} /> الإعدادات
                 </MenuItem>
               </>
             )}
             <MenuItem onClick={handleLogout}>
-              <ExitToApp sx={{ mr: 1 }} /> Logout
+              <ExitToApp sx={{ mr: 1 }} /> تسجيل الخروج
             </MenuItem>
           </Menu>
         </div>

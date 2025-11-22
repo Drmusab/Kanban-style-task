@@ -50,10 +50,10 @@ const Login = () => {
         <Card sx={{ width: '100%', maxWidth: 400 }}>
           <CardContent sx={{ p: 4 }}>
             <Typography component="h1" variant="h4" align="center" gutterBottom>
-              Kanban Manager
+              مدير كانبان
             </Typography>
             <Typography variant="body2" align="center" color="text.secondary" sx={{ mb: 3 }}>
-              Sign in to your account
+              سجّل الدخول إلى حسابك
             </Typography>
             
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -64,7 +64,7 @@ const Login = () => {
                 required
                 fullWidth
                 id="username"
-                label="Username"
+                label="اسم المستخدم"
                 name="username"
                 autoComplete="username"
                 autoFocus
@@ -76,7 +76,7 @@ const Login = () => {
                 required
                 fullWidth
                 name="password"
-                label="Password"
+                label="كلمة المرور"
                 type="password"
                 id="password"
                 autoComplete="current-password"
@@ -90,12 +90,12 @@ const Login = () => {
                 sx={{ mt: 3, mb: 2 }}
                 disabled={loading}
               >
-                Sign In
+                تسجيل الدخول
               </Button>
             </Box>
-            
+
             <Typography variant="body2" align="center" color="text.secondary" sx={{ mt: 2 }}>
-              Demo credentials: username: demo, password: demo123
+              بيانات الدخول التجريبية: اسم المستخدم: demo، كلمة المرور: demo123
             </Typography>
           </CardContent>
         </Card>

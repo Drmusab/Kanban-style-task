@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -16,6 +16,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 
 const theme = createTheme({
+  direction: 'rtl',
   palette: {
     mode: 'light',
     primary: {
@@ -32,22 +33,29 @@ function AppRoutes() {
 
   return (
     <Router>
-      <Navbar />
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/boards" element={isAuthenticated ? <Boards /> : <Navigate to="/login" />} />
-        <Route path="/board/:id" element={isAuthenticated ? <Board /> : <Navigate to="/login" />} />
-        <Route path="/routines" element={isAuthenticated ? <Routines /> : <Navigate to="/login" />} />
-        <Route path="/settings" element={isAuthenticated ? <Settings /> : <Navigate to="/login" />} />
-        <Route path="/analytics" element={isAuthenticated ? <Analytics /> : <Navigate to="/login" />} />
-        <Route path="/calendar" element={isAuthenticated ? <Calendar /> : <Navigate to="/login" />} />
-        <Route path="/" element={isAuthenticated ? <Navigate to="/boards" /> : <Navigate to="/login" />} />
-      </Routes>
+      <div dir="rtl">
+        <Navbar />
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/boards" element={isAuthenticated ? <Boards /> : <Navigate to="/login" />} />
+          <Route path="/board/:id" element={isAuthenticated ? <Board /> : <Navigate to="/login" />} />
+          <Route path="/routines" element={isAuthenticated ? <Routines /> : <Navigate to="/login" />} />
+          <Route path="/settings" element={isAuthenticated ? <Settings /> : <Navigate to="/login" />} />
+          <Route path="/analytics" element={isAuthenticated ? <Analytics /> : <Navigate to="/login" />} />
+          <Route path="/calendar" element={isAuthenticated ? <Calendar /> : <Navigate to="/login" />} />
+          <Route path="/" element={isAuthenticated ? <Navigate to="/boards" /> : <Navigate to="/login" />} />
+        </Routes>
+      </div>
     </Router>
   );
 }
 
 function App() {
+  useEffect(() => {
+    document.documentElement.lang = 'ar';
+    document.documentElement.dir = 'rtl';
+  }, []);
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
