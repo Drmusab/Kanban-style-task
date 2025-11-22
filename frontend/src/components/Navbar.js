@@ -17,7 +17,8 @@ import {
   Dashboard,
   Settings,
   Analytics,
-  ExitToApp
+  ExitToApp,
+  Repeat
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -62,16 +63,24 @@ const Navbar = () => {
         
         {!isMobile && (
           <Box sx={{ display: 'flex', gap: 2 }}>
-            <Button 
-              color="inherit" 
+            <Button
+              color="inherit"
               startIcon={<Dashboard />}
               onClick={() => navigate('/boards')}
               variant={location.pathname === '/boards' ? 'outlined' : 'text'}
             >
               Boards
             </Button>
-            <Button 
-              color="inherit" 
+            <Button
+              color="inherit"
+              startIcon={<Repeat />}
+              onClick={() => navigate('/routines')}
+              variant={location.pathname === '/routines' ? 'outlined' : 'text'}
+            >
+              Routines
+            </Button>
+            <Button
+              color="inherit"
               startIcon={<Analytics />}
               onClick={() => navigate('/analytics')}
               variant={location.pathname === '/analytics' ? 'outlined' : 'text'}
@@ -123,6 +132,9 @@ const Navbar = () => {
               <>
                 <MenuItem onClick={() => handleNavigation('/boards')}>
                   <Dashboard sx={{ mr: 1 }} /> Boards
+                </MenuItem>
+                <MenuItem onClick={() => handleNavigation('/routines')}>
+                  <Repeat sx={{ mr: 1 }} /> Routines
                 </MenuItem>
                 <MenuItem onClick={() => handleNavigation('/analytics')}>
                   <Analytics sx={{ mr: 1 }} /> Analytics
