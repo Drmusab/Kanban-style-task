@@ -13,9 +13,6 @@ const sendNotification = async (title, message, options = {}) => {
       metadata = {}
     } = options;
 
-    // Log notification
-    console.log(`NOTIFICATION [${type.toUpperCase()}]: ${title} - ${message}`);
-    
     // Send to n8n webhooks if enabled
     if (sendToN8n) {
       try {
