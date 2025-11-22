@@ -436,6 +436,11 @@ export class KanbanApp implements INodeType {
             type: 'number',
             default: 0,
             description: 'User ID that should be recorded as the creator',
+            displayOptions: {
+              show: {
+                '/operation': ['create'],
+              },
+            },
           },
           {
             displayName: 'Assigned To',
@@ -582,6 +587,18 @@ export class KanbanApp implements INodeType {
         },
         options: [
           {
+            displayName: 'Name',
+            name: 'name',
+            type: 'string',
+            default: '',
+            description: 'Board name',
+            displayOptions: {
+              show: {
+                '/operation': ['update'],
+              },
+            },
+          },
+          {
             displayName: 'Description',
             name: 'description',
             type: 'string',
@@ -596,6 +613,18 @@ export class KanbanApp implements INodeType {
             type: 'boolean',
             default: false,
             description: 'Mark the board as a reusable template',
+          },
+          {
+            displayName: 'Created By',
+            name: 'created_by',
+            type: 'number',
+            default: 0,
+            description: 'User ID that should be recorded as the creator',
+            displayOptions: {
+              show: {
+                '/operation': ['create'],
+              },
+            },
           },
         ],
       },
