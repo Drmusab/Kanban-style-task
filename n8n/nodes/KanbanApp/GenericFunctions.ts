@@ -1,96 +1,86 @@
-import type { IExecuteFunctions, ILoadOptionsFunctions, ITriggerFunctions } from 'n8n-core';
-import type { IDataObject } from 'n8n-workflow';
-
-interface RequestOptions {
-  method: string;
-  uri: string;
-  json: boolean;
-  qs?: IDataObject;
-  body?: IDataObject;
-  headers?: Record<string, string>;
-}
-
-interface KanbanCredentials {
-  baseUrl: string;
-  apiKey?: string;
-}
+import {
+	IExecuteFunctions,
+	IHookFunctions,
+	ILoadOptionsFunctions,
+	IWebhookFunctions,
+	IHttpRequestOptions,
+	NodeApiError,
+} from 'n8n-workflow';
 
 export async function kanbanApiRequest(
-  this: IExecuteFunctions | ILoadOptionsFunctions | ITriggerFunctions,
-  method: string,
-  endpoint: string,
-  body: IDataObject = {},
-  qs: IDataObject = {},
+	this: IHookFunctions | IExecuteFunctions | ILoadOptionsFunctions | IWebhookFunctions,
+	method: string,
+	resource: string,
+	body: any = {},
+	qs: any = {},
+	uri?: string,
+	headers: any = {},
 ): Promise<any> {
-  const credentials = (await this.getCredentials('kanbanAppApi')) as KanbanCredentials;
+	const credentials = await this.getCredentials('kanbanAppApi');
 
-  if (!credentials?.baseUrl) {
-    throw new Error('Kanban App base URL is missing from the credentials.');
-  }
+	const options: IHttpRequestOptions = {
+		method,
+		headers: {
+			'Content-Type': 'application/json',
+			'Accept': 'application/json',
+		},
+		body,
+		qs,
+		url: uri || `${credentials.baseUrl}/api${resource}`,
+		json: true,
+	};
 
-  const options: RequestOptions = {
-    method,
-    uri: `${credentials.baseUrl.replace(/\/$/, '')}${endpoint}`,
-    json: true,
-    qs,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  };
+	// Add API key authentication if provided
+	if (credentials.apiKey) {
+		options.headers!['x-api-key'] = credentials.apiKey;
+	}
 
-  if (Object.keys(body).length > 0) {
-    options.body = body;
-  }
+	// Add authorization header if JWT token is provided
+	if (credentials.accessToken) {
+		options.headers!['Authorization'] = `Bearer ${credentials.accessToken}`;
+	}
 
-  if (credentials.apiKey) {
-    options.headers = {
-      ...options.headers,
-      Authorization: `Bearer ${credentials.apiKey}`,
-      'X-API-Key': credentials.apiKey,
-    };
-  }
+	try {
+		if (Object.keys(headers).length !== 0) {
+			options.headers = Object.assign({}, options.headers, headers);
+		}
+		if (Object.keys(body).length === 0) {
+			delete options.body;
+		}
 
-  try {
-    return await this.helpers.request(options);
-  } catch (error: any) {
-    if (error?.response?.body?.message) {
-      throw new Error(`Kanban App error response [${error.response.statusCode}]: ${error.response.body.message}`);
-    }
-
-    throw error;
-  }
+		const response = await this.helpers.httpRequest!(options);
+		return response;
+	} catch (error) {
+		throw new NodeApiError(this.getNode(), error);
+	}
 }
 
 export async function kanbanApiRequestAllItems(
-  this: IExecuteFunctions,
-  method: string,
-  endpoint: string,
-  body: IDataObject = {},
-  qs: IDataObject = {},
-): Promise<IDataObject[]> {
-  const returnData: IDataObject[] = [];
-  let responseData;
-  let page = 0;
+	this: IExecuteFunctions | ILoadOptionsFunctions,
+	method: string,
+	endpoint: string,
+	body: any = {},
+	query: any = {},
+): Promise<any> {
+	const returnData: any[] = [];
 
-  do {
-    const requestQuery = {
-      ...qs,
-      offset: page * 50,
-      limit: 50,
-    };
+	let responseData;
+	query.limit = 100;
+	query.offset = 0;
 
-    responseData = await kanbanApiRequest.call(this, method, endpoint, body, requestQuery);
+	do {
+		responseData = await kanbanApiRequest.call(this, method, endpoint, body, query);
+		
+		if (Array.isArray(responseData)) {
+			returnData.push.apply(returnData, responseData);
+			query.offset += query.limit;
+		} else if (responseData.data && Array.isArray(responseData.data)) {
+			returnData.push.apply(returnData, responseData.data);
+			query.offset += query.limit;
+		} else {
+			return responseData;
+		}
+	} while (responseData.length !== 0 && responseData.length === query.limit);
 
-    if (Array.isArray(responseData)) {
-      returnData.push(...responseData);
-    } else if (responseData?.data && Array.isArray(responseData.data)) {
-      returnData.push(...responseData.data);
-    } else {
-      returnData.push(responseData as IDataObject);
-    }
-
-    page += 1;
-  } while (Array.isArray(responseData) && responseData.length === 50);
-
-  return returnData;
+	return returnData;
 }
