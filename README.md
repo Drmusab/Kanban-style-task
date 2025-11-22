@@ -1112,6 +1112,41 @@ docker-compose up -d
 3. Ensure ports 3000, 3001, 5678 are not in use
 4. Try rebuilding: `docker-compose up -d --build --force-recreate`
 
+#### npm ci fails during Docker build
+
+**Problem**: Docker build fails with error: `The npm ci command can only install with an existing package-lock.json`
+
+**Solutions:**
+1. Ensure you have the latest code from the repository:
+   ```bash
+   git pull origin main
+   ```
+2. Verify that `package-lock.json` files exist in `frontend/`, `backend/`, and `n8n/` directories:
+   ```bash
+   ls -la frontend/package-lock.json backend/package-lock.json n8n/package-lock.json
+   ```
+3. If the files are missing, regenerate them:
+   ```bash
+   cd frontend && npm install && cd ..
+   cd backend && npm install && cd ..
+   cd n8n && npm install && cd ..
+   ```
+4. Commit the generated `package-lock.json` files:
+   ```bash
+   git add */package-lock.json
+   git commit -m "Add package-lock.json files"
+   ```
+5. Rebuild Docker images:
+   ```bash
+   docker-compose build --no-cache
+   docker-compose up -d
+   ```
+
+**On Windows**: If you see PowerShell execution policy errors when running npm commands:
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
 #### Cannot connect to backend
 
 **Problem**: Frontend shows connection errors
