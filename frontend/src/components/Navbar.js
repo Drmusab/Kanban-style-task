@@ -62,8 +62,16 @@ const Navbar = () => {
         
         {!isMobile && (
           <Box sx={{ display: 'flex', gap: 2 }}>
-            <Button 
-              color="inherit" 
+            <Button
+              color="inherit"
+              startIcon={<Dashboard />}
+              onClick={() => navigate('/dashboard')}
+              variant={location.pathname === '/dashboard' ? 'outlined' : 'text'}
+            >
+              Dashboard
+            </Button>
+            <Button
+              color="inherit"
               startIcon={<Dashboard />}
               onClick={() => navigate('/boards')}
               variant={location.pathname === '/boards' ? 'outlined' : 'text'}
@@ -121,6 +129,9 @@ const Navbar = () => {
           >
             {isMobile && (
               <>
+                <MenuItem onClick={() => handleNavigation('/dashboard')}>
+                  <Dashboard sx={{ mr: 1 }} /> Dashboard
+                </MenuItem>
                 <MenuItem onClick={() => handleNavigation('/boards')}>
                   <Dashboard sx={{ mr: 1 }} /> Boards
                 </MenuItem>

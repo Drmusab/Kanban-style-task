@@ -1,27 +1,25 @@
-const { db } = require('../utils/database');
+const { broadcastN8nEvent } = require('./n8n');
 
-// Send a desktop notification
-const sendNotification = async (title, message) => {
+// Send a desktop or webhook notification
+const sendNotification = async (title, message, payload = {}) => {
   try {
-    // In a real implementation, you would use a library like 'node-notifier'
-    // For this example, we'll just log the notification
     console.log(`NOTIFICATION: ${title} - ${message}`);
-    
-    // In a real implementation, you might do something like:
-    // const notifier = require('node-notifier');
-    // notifier.notify({
-    //   title: title,
-    //   message: message
-    // });
-    
+
+    const n8nResult = await broadcastN8nEvent(
+      'notification',
+      { title, message, ...payload },
+      { silent: true }
+    );
+
     return {
       success: true,
-      message: 'Notification sent successfully'
+      message: 'Notification processed',
+      n8n: n8nResult,
     };
   } catch (error) {
     return {
       success: false,
-      error: error.message
+      error: error.message,
     };
   }
 };

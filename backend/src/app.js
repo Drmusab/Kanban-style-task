@@ -12,6 +12,9 @@ const userRoutes = require('./routes/users');
 const integrationRoutes = require('./routes/integrations');
 const automationRoutes = require('./routes/automation');
 const syncRoutes = require('./routes/sync');
+const aiRoutes = require('./routes/ai');
+const reportRoutes = require('./routes/reports');
+const routineRoutes = require('./routes/routines');
 const { startScheduler } = require('./services/scheduler');
 
 const app = express();
@@ -46,6 +49,9 @@ app.use('/api/users', userRoutes);
 app.use('/api/integrations', integrationRoutes);
 app.use('/api/automation', automationRoutes);
 app.use('/api/sync', syncRoutes);
+app.use('/api/ai', aiRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/api/routines', routineRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

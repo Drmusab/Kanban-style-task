@@ -3,6 +3,7 @@ const { db } = require('../utils/database');
 const { triggerAutomation } = require('./automation');
 const { sendNotification } = require('./notifications');
 const { createRecurringTask } = require('./tasks');
+const { broadcastN8nEvent } = require('./n8n');
 
 // Start the scheduler
 const startScheduler = () => {
@@ -31,34 +32,58 @@ const startScheduler = () => {
             if (nowDate - dueDate > 60 * 60 * 1000) {
               // Trigger automation for overdue task
               triggerAutomation('task_overdue', { taskId: task.id, columnId: task.column_id });
-              
+
               // Send notification for overdue task
-              sendNotification(
+              await sendNotification(
                 `Overdue Task: ${task.title}`,
-                `Task "${task.title}" was due on ${dueDate.toLocaleDateString()} at ${dueDate.toLocaleTimeString()}`
+                `Task "${task.title}" was due on ${dueDate.toLocaleDateString()} at ${dueDate.toLocaleTimeString()}`,
+                { taskId: task.id, columnId: task.column_id, dueDate: task.due_date, status: 'overdue' }
               );
+
+              await broadcastN8nEvent('task_overdue', {
+                taskId: task.id,
+                title: task.title,
+                columnId: task.column_id,
+                dueDate: task.due_date,
+              }, { silent: true });
             }
             // Check if task is due (within 1 hour of due date)
             else if (nowDate - dueDate >= 0) {
               // Trigger automation for due task
               triggerAutomation('task_due', { taskId: task.id, columnId: task.column_id });
-              
+
               // Send notification for due task
-              sendNotification(
+              await sendNotification(
                 `Due Task: ${task.title}`,
-                `Task "${task.title}" is due now`
+                `Task "${task.title}" is due now`,
+                { taskId: task.id, columnId: task.column_id, dueDate: task.due_date, status: 'due' }
               );
+
+              await broadcastN8nEvent('task_due', {
+                taskId: task.id,
+                title: task.title,
+                columnId: task.column_id,
+                dueDate: task.due_date,
+              }, { silent: true });
             }
             // Check if task is due soon (within 1 hour of due date)
             else if (dueDate - nowDate <= 60 * 60 * 1000) {
               // Trigger automation for task due soon
               triggerAutomation('task_due_soon', { taskId: task.id, columnId: task.column_id });
-              
+
               // Send notification for task due soon
-              sendNotification(
+              await sendNotification(
                 `Task Due Soon: ${task.title}`,
-                `Task "${task.title}" is due at ${dueDate.toLocaleTimeString()}`
+                `Task "${task.title}" is due at ${dueDate.toLocaleTimeString()}`,
+                { taskId: task.id, columnId: task.column_id, dueDate: task.due_date, status: 'due_soon' }
               );
+
+              await broadcastN8nEvent('task_due_soon', {
+                taskId: task.id,
+                title: task.title,
+                columnId: task.column_id,
+                dueDate: task.due_date,
+              }, { silent: true });
             }
           }
         }
@@ -89,7 +114,16 @@ const startScheduler = () => {
 
               // Check if we need to create a new instance of this recurring task
               if (shouldCreateRecurringTask(lastDueDate, recurringRule, today)) {
-                await createRecurringTask(task, recurringRule);
+                const newTaskId = await createRecurringTask(task, recurringRule);
+
+                await broadcastN8nEvent('routine_instance_created', {
+                  parentTaskId: task.id,
+                  newTaskId,
+                  title: task.title,
+                  columnId: task.column_id,
+                  dueDate: task.due_date,
+                  rule: recurringRule,
+                }, { silent: true });
               }
             } catch (error) {
               console.error(`Error processing recurring task ${task.id}:`, error);
