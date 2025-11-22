@@ -436,6 +436,11 @@ export class KanbanApp implements INodeType {
             type: 'number',
             default: 0,
             description: 'User ID that should be recorded as the creator',
+            displayOptions: {
+              show: {
+                '/operation': ['create'],
+              },
+            },
           },
           {
             displayName: 'Assigned To',
