@@ -285,9 +285,9 @@ Fill in the required fields:
 | Field | Description | Example | Required |
 |-------|-------------|---------|----------|
 | **Base URL** | URL of your Kanban backend API | `http://localhost:3001` | Yes |
-| **API Key** | Authentication key for secured endpoints | `your-api-key-here` | No* |
+| **API Key** | Authentication key for secured endpoints | `your-api-key-here` | Conditional* |
 
-**Note:** *API Key is required if your Kanban backend has API key authentication enabled.
+**Note:** *API Key is **required** if your Kanban backend has the `N8N_API_KEY` environment variable configured. If the backend does not require API key authentication (local development environments), this field can be left empty.
 
 **Examples:**
 
@@ -857,9 +857,13 @@ Kanban App Trigger → IF (Check Subtasks) → Kanban App (Update)
 - Event Types: Task Updated
 
 **IF Node:**
-- Expression: Check if all subtasks are completed
+- Condition: Value 1: `{{ $json.subtasks }}`
+- Operation: Is not empty
+- Add a second IF or use a Function node to check completion:
 ```javascript
-{{ $json.subtasks && $json.subtasks.every(st => st.completed) }}
+// In a Function node
+const subtasks = $input.item.json.subtasks;
+return subtasks && subtasks.length > 0 && subtasks.filter(st => !st.completed).length === 0;
 ```
 
 **Kanban App Update Node:**
@@ -1260,7 +1264,7 @@ The project uses strict TypeScript settings:
 ### Adding New Operations
 
 1. **Define Operation:**
-   Edit `KanbanApp.node.ts` properties array:
+   Edit `nodes/KanbanApp/KanbanApp.node.ts` properties array:
    ```typescript
    {
      name: 'New Operation',
