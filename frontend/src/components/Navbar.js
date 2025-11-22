@@ -15,6 +15,7 @@ import {
 import {
   AccountCircle,
   Dashboard,
+  Event,
   Settings,
   Analytics,
   ExitToApp,
@@ -70,6 +71,14 @@ const Navbar = () => {
               variant={location.pathname === '/boards' ? 'outlined' : 'text'}
             >
               Boards
+            </Button>
+            <Button
+              color="inherit"
+              startIcon={<Event />}
+              onClick={() => navigate('/calendar')}
+              variant={location.pathname === '/calendar' ? 'outlined' : 'text'}
+            >
+              Calendar
             </Button>
             <Button
               color="inherit"
@@ -132,6 +141,9 @@ const Navbar = () => {
               <>
                 <MenuItem onClick={() => handleNavigation('/boards')}>
                   <Dashboard sx={{ mr: 1 }} /> Boards
+                </MenuItem>
+                <MenuItem onClick={() => handleNavigation('/calendar')}>
+                  <Event sx={{ mr: 1 }} /> Calendar
                 </MenuItem>
                 <MenuItem onClick={() => handleNavigation('/routines')}>
                   <Repeat sx={{ mr: 1 }} /> Routines
