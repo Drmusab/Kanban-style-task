@@ -1,12 +1,15 @@
-# Kanban Task Management Application
+# Local-First AI-Integrated Task Manager
 
-A comprehensive, professional-grade Kanban-style task management web application designed to run locally on your PC. Built with a modern tech stack featuring React, Node.js, Express, and SQLite, this application provides an intuitive, responsive interface for managing tasks with advanced features including automation, analytics, and n8n integration.
+A comprehensive, professional-grade Kanban-style task management web application with **AI integration** and **advanced n8n automation**. Designed to run locally on your PC, this application provides an intuitive, responsive interface for managing tasks with natural language commands, automated reporting, and intelligent notifications.
+
+Built with a modern tech stack featuring React, Node.js, Express, and SQLite.
 
 ---
 
 ## 📑 Table of Contents
 
 - [Features](#features)
+- [AI Integration](#ai-integration)
 - [Technology Stack](#technology-stack)
 - [System Requirements](#system-requirements)
 - [Installation](#installation)
@@ -17,6 +20,7 @@ A comprehensive, professional-grade Kanban-style task management web application
   - [Getting Started](#getting-started-1)
   - [Managing Boards](#managing-boards)
   - [Working with Tasks](#working-with-tasks)
+  - [AI Commands](#ai-commands)
   - [Automation & Integrations](#automation--integrations)
   - [Analytics & Reporting](#analytics--reporting)
 - [API Documentation](#api-documentation)
@@ -43,16 +47,76 @@ A comprehensive, professional-grade Kanban-style task management web application
   - Task assignment
 - **Task History**: Complete audit trail of all task changes
 
+### AI-Powered Features ✨ NEW
+- **Natural Language Commands**: Control your tasks using plain English
+  - "Create high priority task 'Deploy application' in To Do"
+  - "List tasks in In Progress"
+  - "Show weekly report"
+- **Intelligent Notifications**: Automated notifications sent to n8n webhooks
+  - Task due date alerts
+  - Overdue task notifications
+  - Routine task reminders
+- **Automated Reporting**: Comprehensive analytics and productivity reports
+  - Weekly automated reports to n8n
+  - Custom date range analysis
+  - Productivity metrics and trends
+  - Task completion analytics
+
 ### Advanced Features
 - **Automation Engine**: Create custom automation rules triggered by task events
-- **n8n Integration**: Connect with external systems via webhooks
-- **Recurring Tasks**: Set up time-based recurring task patterns
+- **n8n Integration**: Three specialized integration nodes
+  - **AI Agent Node**: Natural language command processing
+  - **Notification Node**: Real-time event notifications
+  - **Reporting Node**: Automated analytics and reporting
+- **Recurring Tasks**: Set up time-based recurring task patterns with automated reminders
 - **Real-time Sync**: Server-Sent Events for live updates across clients
 - **Analytics Dashboard**: Visualize task metrics, completion rates, and productivity trends
 - **Offline-First**: Works without internet connection using local SQLite database
 - **Backup & Restore**: Built-in data backup functionality
 - **Theming**: Customizable appearance and accessibility features
 - **Secure API**: API key authentication for webhook and automation endpoints
+
+---
+
+## AI Integration
+
+This application features comprehensive AI integration designed for use with n8n workflows. See the [AI Integration Guide](./docs/AI_INTEGRATION_GUIDE.md) for detailed documentation.
+
+### Quick Examples
+
+**Natural Language Task Management:**
+```bash
+# Create tasks with priority
+curl -X POST http://localhost:3001/api/ai/command \
+  -H "Content-Type: application/json" \
+  -d '{"command": "Create high priority task \"Deploy to production\" in To Do"}'
+
+# List tasks by column
+curl -X POST http://localhost:3001/api/ai/command \
+  -H "Content-Type: application/json" \
+  -d '{"command": "List tasks in In Progress"}'
+
+# Generate reports
+curl -X POST http://localhost:3001/api/ai/command \
+  -H "Content-Type: application/json" \
+  -d '{"command": "Show weekly report"}'
+```
+
+**Automated Notifications:**
+- Automatically sends notifications to n8n webhooks for due tasks
+- Routine reminders for recurring tasks
+- Custom event notifications with rich metadata
+
+**Intelligent Reporting:**
+- Weekly automated reports every Monday at 9 AM
+- Custom date range analytics
+- Productivity metrics (completion rates, velocity, user stats)
+
+See the [AI Integration Guide](./docs/AI_INTEGRATION_GUIDE.md) for:
+- Complete command reference
+- n8n workflow examples
+- Notification payload structures
+- Report customization
 
 ---
 
@@ -883,6 +947,106 @@ Content-Type: application/json
 
 {
   "id": 1
+}
+```
+
+#### AI Commands ✨ NEW
+
+**Execute Natural Language Command**
+```http
+POST /api/ai/command
+Content-Type: application/json
+
+{
+  "command": "Create high priority task \"Deploy application\" in To Do"
+}
+
+Response: {
+  "action": "create",
+  "success": true,
+  "taskId": 123,
+  "priority": "high",
+  "message": "Created high priority task \"Deploy application\" in To Do"
+}
+```
+
+**Get Command Patterns**
+```http
+GET /api/ai/patterns
+
+Response: {
+  "examples": [
+    "Create task \"Write release notes\" in Done",
+    "List tasks in To Do",
+    "Show weekly report"
+  ],
+  "supportedActions": [
+    "create", "move", "complete", "set_due", "set_priority", "list", "report"
+  ]
+}
+```
+
+#### Reports & Analytics ✨ NEW
+
+**Weekly Report**
+```http
+GET /api/reports/weekly
+
+Response: {
+  "period": { "start": "...", "end": "...", "days": 7 },
+  "summary": {
+    "tasksCreated": 25,
+    "tasksCompleted": 18,
+    "tasksOverdue": 3,
+    "completionRate": "72.00%",
+    "avgCompletionTimeHours": "24.50"
+  },
+  "tasksByColumn": [...],
+  "tasksByPriority": [...],
+  "activeBoards": [...]
+}
+```
+
+**Custom Date Range Report**
+```http
+GET /api/reports/custom?startDate=2024-11-01T00:00:00Z&endDate=2024-11-30T23:59:59Z
+
+Response: {
+  "period": { ... },
+  "summary": { ... },
+  "tasksByColumn": [...]
+}
+```
+
+**Productivity Analytics**
+```http
+GET /api/reports/analytics?days=30
+
+Response: {
+  "period": { "days": 30, ... },
+  "dailyCompletions": [...],
+  "userProductivity": [...],
+  "velocity": [...]
+}
+```
+
+**Send Report to n8n**
+```http
+POST /api/reports/weekly/send-to-n8n
+
+Response: {
+  "success": true,
+  "message": "Report sent to 2 of 2 webhooks"
+}
+```
+
+```http
+POST /api/reports/custom/send-to-n8n
+Content-Type: application/json
+
+{
+  "startDate": "2024-11-01T00:00:00Z",
+  "endDate": "2024-11-30T23:59:59Z"
 }
 ```
 
