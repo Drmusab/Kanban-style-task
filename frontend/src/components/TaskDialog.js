@@ -31,7 +31,16 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-const TaskDialog = ({ open, task, onClose, onSave }) => {
+const TaskDialog = ({
+  open,
+  task,
+  onClose,
+  onSave,
+  availableColumns = [],
+  availableSwimlanes = [],
+  availableTags = [],
+  availableUsers = []
+}) => {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -46,10 +55,6 @@ const TaskDialog = ({ open, task, onClose, onSave }) => {
     subtasks: []
   });
   const [newSubtask, setNewSubtask] = useState('');
-  const [availableTags, setAvailableTags] = useState([]);
-  const [availableUsers, setAvailableUsers] = useState([]);
-  const [availableColumns, setAvailableColumns] = useState([]);
-  const [availableSwimlanes, setAvailableSwimlanes] = useState([]);
   const [showMarkdownPreview, setShowMarkdownPreview] = useState(false);
 
   useEffect(() => {
@@ -77,46 +82,6 @@ const TaskDialog = ({ open, task, onClose, onSave }) => {
     setNewSubtask('');
     setShowMarkdownPreview(false);
   }, [task, open]);
-
-  useEffect(() => {
-    // Fetch available data
-    const fetchAvailableData = async () => {
-      try {
-        // In a real app, you would fetch these from the API
-        // For now, we'll use mock data
-        setAvailableTags([
-          { id: 1, name: 'Bug', color: '#e74c3c' },
-          { id: 2, name: 'Feature', color: '#2ecc71' },
-          { id: 3, name: 'Enhancement', color: '#3498db' },
-          { id: 4, name: 'Urgent', color: '#e67e22' }
-        ]);
-        
-        setAvailableUsers([
-          { id: 1, username: 'user1' },
-          { id: 2, username: 'user2' }
-        ]);
-        
-        setAvailableColumns([
-          { id: 1, name: 'To Do' },
-          { id: 2, name: 'In Progress' },
-          { id: 3, name: 'Review' },
-          { id: 4, name: 'Done' }
-        ]);
-        
-        setAvailableSwimlanes([
-          { id: 1, name: 'High Priority' },
-          { id: 2, name: 'Medium Priority' },
-          { id: 3, name: 'Low Priority' }
-        ]);
-      } catch (error) {
-        console.error('Error fetching available data:', error);
-      }
-    };
-    
-    if (open) {
-      fetchAvailableData();
-    }
-  }, [open]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;

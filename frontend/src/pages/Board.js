@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   Box,
@@ -62,6 +62,53 @@ const Board = () => {
   const [swimlaneMenuAnchor, setSwimlaneMenuAnchor] = useState(null);
   const [selectedColumnForMenu, setSelectedColumnForMenu] = useState(null);
   const [selectedSwimlaneForMenu, setSelectedSwimlaneForMenu] = useState(null);
+
+  const availableColumns = board?.columns || [];
+  const availableSwimlanes = board?.swimlanes || [];
+
+  const availableTags = useMemo(() => {
+    const tagMap = new Map();
+
+    tasks.forEach(task => {
+      (task.tags || []).forEach(tag => {
+        const tagId = tag.id ?? tag.tag_id;
+
+        if (!tagId || tagMap.has(tagId)) {
+          return;
+        }
+
+        tagMap.set(tagId, {
+          id: tagId,
+          name: tag.name ?? tag.tag_name ?? `Tag ${tagId}`,
+          color: tag.color ?? tag.tag_color ?? '#3498db'
+        });
+      });
+    });
+
+    return Array.from(tagMap.values());
+  }, [tasks]);
+
+  const availableUsers = useMemo(() => {
+    const userMap = new Map();
+
+    tasks.forEach(task => {
+      if (task.created_by && task.created_by_name && !userMap.has(task.created_by)) {
+        userMap.set(task.created_by, {
+          id: task.created_by,
+          username: task.created_by_name
+        });
+      }
+
+      if (task.assigned_to && task.assigned_to_name && !userMap.has(task.assigned_to)) {
+        userMap.set(task.assigned_to, {
+          id: task.assigned_to,
+          username: task.assigned_to_name
+        });
+      }
+    });
+
+    return Array.from(userMap.values());
+  }, [tasks]);
 
   useEffect(() => {
     const fetchBoardData = async () => {
@@ -591,8 +638,12 @@ const Board = () => {
       <TaskDialog
         open={taskDialogOpen}
         task={selectedTask}
-        onClose={() => setTaskDialogOpen(false)}
         onSave={handleSaveTask}
+        availableColumns={availableColumns}
+        availableSwimlanes={availableSwimlanes}
+        availableTags={availableTags}
+        availableUsers={availableUsers}
+        onClose={() => setTaskDialogOpen(false)}
       />
       
       {/* Column Dialog */}
