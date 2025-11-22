@@ -1127,13 +1127,13 @@ docker-compose up -d
    ```
 3. If the files are missing, regenerate them:
    ```bash
-   cd frontend && npm install && cd ..
-   cd backend && npm install && cd ..
-   cd n8n && npm install && cd ..
+   (cd frontend && npm install)
+   (cd backend && npm install)
+   (cd n8n && npm install)
    ```
 4. Commit the generated `package-lock.json` files:
    ```bash
-   git add */package-lock.json
+   git add frontend/package-lock.json backend/package-lock.json n8n/package-lock.json
    git commit -m "Add package-lock.json files"
    ```
 5. Rebuild Docker images:
